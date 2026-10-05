@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>自作ナビ 検証1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
+<style>
+body{margin:0;font-family:sans-serif}
+#map{position:absolute;top:0;bottom:0;left:0;right:380px}
+#panel{position:absolute;top:0;bottom:0;right:0;width:380px;overflow:auto;padding:10px;box-sizing:border-box;background:#fafafa;border-left:1px solid #ccc;font-size:14px}
+button{font-size:15px;padding:6px 12px;margin:4px 4px 4px 0;cursor:pointer}
+.route{border:1px solid #ccc;border-radius:6px;padding:8px;margin:8px 0;background:#fff;line-height:1.6}
+.err{color:#c00;white-space:pre-wrap}
+.legend span{display:inline-block;width:16px;height:6px;margin:0 3px 2px 8px}
+.inc{color:#8e44ad}
+@media (max-width:700px){
+  #map{right:0;bottom:45%}
+  #panel{top:55%;width:100%;border-left:none;border-top:1px solid #ccc}
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <h3 style="margin:4px 0">自作ナビ 検証1</h3>
+  <div class="legend">渋滞：<span style="background:#2ecc71"></span>順調<span style="background:#f1c40f"></span>混雑<span style="background:#e67e22"></span>渋滞<span style="background:#c0392b"></span>大渋滞</div>
+  <p id="guide">地図をクリックして <b>出発地</b> を置いてください。</p>
+  <button id="run" disabled>ルートを比較</button>
+  <button id="reset">やり直す</button>
+  <div id="status"></div>
+  <div id="result"></div>
+</div>
+<script>
+// ▼▼▼ ここにトークンを貼る（pk. で始まる文字列） ▼▼▼
+const TOKEN = 'pk.eyJ1IjoiaG9yaWhha28iLCJhIjoiY211djd0ejljMDA5ZjMycHYxaTY3M3BsdSJ9.a1yefJYynC4k_YvllM5DVw';
+// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+mapboxgl.accessToken = TOKEN;
+const map = new mapboxgl.Map({
+  container: 'map', style: 'mapbox://styles/mapbox/standard',
+  center: [139.12, 35.64], zoom: 10, language: 'ja'
+});
+map.addControl(new mapboxgl.NavigationControl());
+
+const COLORS = {low:'#2ecc71', moderate:'#f1c40f', heavy:'#e67e22', severe:'#c0392b', unknown:'#5dade2'};
+const INC = {accident:'事故', congestion:'渋滞', construction:'工事', disabled_vehicle:'故障車',
+  lane_restriction:'車線規制', road_closure:'通行止め', road_hazard:'路上障害物', weather:'気象',
+  planned_event:'イベント', mass_transit:'公共交通', other_news:'その他', miscellaneous:'その他'};
+const PAL = ['#1f3a93','#16a085','#d35400','#8e44ad','#2c3e50'];
+
+let start = null, end = null, markers = [];
+const $ = id => document.getElementById(id);
+const empty = {type:'FeatureCollection', features:[]};
+const setData = (id, f) => map.getSource(id).setData({type:'FeatureCollection', features:f});
+const showErr = m => { $('status').innerHTML += `<div class="err">${m}</div>`; };
+
+map.on('error', e => showErr('地図エラー：' + (e.error && e.error.message ? e.error.message : '不明')));
+
+map.on('load', () => {
+  map.addSource('traffic', {type:'vector', url:'mapbox://mapbox.mapbox-traffic-v1'});
+  map.addLayer({id:'traffic', type:'line', source:'traffic', 'source-layer':'traffic',
+    paint:{
+      'line-width':['interpolate',['linear'],['zoom'],8,1.5,14,4],
+      'line-color':['match',['get','congestion'],
+        'low',COLORS.low,'moderate',COLORS.moderate,'heavy',COLORS.heavy,'severe',COLORS.severe,'#999'],
+      'line-opacity':0.85}});
+  map.addSource('casing', {type:'geojson', data:empty});
+  map.addLayer({id:'casing', type:'line', source:'casing',
+    layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':['get','color'], 'line-width':11}});
+  map.addSource('seg', {type:'geojson', data:empty});
+  map.addLayer({id:'seg', type:'line', source:'seg',
+    layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':['get','color'], 'line-width':5}});
+  map.addSource('inc', {type:'geojson', data:empty});
+  map.addLayer({id:'inc', type:'circle', source:'inc',
+    paint:{'circle-radius':9,'circle-color':'#8e44ad','circle-stroke-color':'#fff','circle-stroke-width':2}});
+  map.on('click', 'inc', e => {
+    new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(e.features[0].properties.text).addTo(map);
+  });
+});
+
+map.on('click', e => {
+  const p = [e.lngLat.lng, e.lngLat.lat];
+  if (!start) {
+    start = p; addMarker(p, '#27ae60');
+    $('guide').innerHTML = '次に <b>目的地</b> をクリックしてください。';
+  } else if (!end) {
+    end = p; addMarker(p, '#c0392b');
+    $('guide').innerHTML = '「ルートを比較」を押してください。';
+    $('run').disabled = false;
+  }
+});
+
+function addMarker(p, color) {
+  markers.push(new mapboxgl.Marker({color}).setLngLat(p).addTo(map));
+}
+
+async function getRoutes(extra) {
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${start.join(',')};${end.join(',')}`
+    + `?geometries=geojson&overview=full&annotations=congestion,distance&access_token=${TOKEN}${extra}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  if (!res.ok || json.code !== 'Ok') throw new Error(`HTTP ${res.status} ${json.code || ''} ${json.message || ''}`);
+  return json.routes;
+}
+
+$('run').onclick = async () => {
+  $('run').disabled = true; $('status').innerHTML = '取得中…'; $('result').innerHTML = '';
+  const all = [];
+  const jobs = [['おまかせ', '&alternatives=true'], ['一般道のみ', '&exclude=motorway']];
+  let errs = '';
+  for (const [name, extra] of jobs) {
+    try {
+      const rs = await getRoutes(extra);
+      rs.forEach((r, i) => all.push({
+        name: name === 'おまかせ' ? (i === 0 ? 'おまかせ最速' : '代替ルート' + i) : name, r}));
+    } catch (e) { errs += `<div class="err">${name}：取得失敗（${e.message}）</div>`; }
+  }
+  $('status').innerHTML = errs;
+  if (!all.length) { $('run').disabled = false; return; }
+
+  all.sort((a, b) => a.r.duration - b.r.duration);
+  const best = all[0].r;
+  const casing = [], seg = [], inc = [], bounds = new mapboxgl.LngLatBounds();
+  let html = '';
+
+  all.forEach((o, k) => {
+    o.color = PAL[k % PAL.length];
+    const r = o.r, coords = r.geometry.coordinates;
+    coords.forEach(c => bounds.extend(c));
+    let cong = [], dist = [], incs = [], clos = 0;
+    r.legs.forEach(l => {
+      const a = l.annotation || {};
+      cong = cong.concat(a.congestion || []);
+      dist = dist.concat(a.distance || []);
+      (l.incidents || []).forEach(x => incs.push(x));
+      clos += (l.closures || []).length;
+    });
+    const cum = [0];
+    dist.forEach((d, i) => cum.push(cum[i] + d));
+    let jam = 0;
+    for (let i = 0; i < coords.length - 1; i++) {
+      const c = cong[i] || 'unknown';
+      if (c === 'heavy' || c === 'severe') jam += dist[i] || 0;
+      seg.push({type:'Feature', properties:{color:COLORS[c] || COLORS.unknown},
+        geometry:{type:'LineString', coordinates:[coords[i], coords[i + 1]]}});
+    }
+    casing.unshift({type:'Feature', properties:{color:o.color}, geometry:r.geometry});
+
+    const min = Math.round(r.duration / 60);
+    const dMin = Math.round((r.duration - best.duration) / 60);
+    const km = (r.distance / 1000).toFixed(1);
+    const dKm = ((r.distance - best.distance) / 1000).toFixed(1);
+    const arr = new Date(Date.now() + r.duration * 1000)
+      .toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+
+    let incHtml = '';
+    incs.forEach(x => {
+      const idx = x.geometry_index_start || 0;
+      const at = ((cum[idx] || 0) / 1000).toFixed(1);
+      const text = `${INC[x.type] || x.type}：${at}km先　${x.description || ''}${x.closed ? '（通行止め）' : ''}`;
+      incHtml += `<div class="inc">● ${text}</div>`;
+      if (coords[idx]) inc.push({type:'Feature', properties:{text},
+        geometry:{type:'Point', coordinates:coords[idx]}});
+    });
+
+    html += `<div class="route" style="border-left:10px solid ${o.color}">
+      <b>${o.name}</b>${k === 0 ? '　★最速' : ''}<br>
+      到着 ${arr}（${min}分${k ? `／+${dMin}分` : ''}）<br>
+      距離 ${km}km${k ? `（${dKm >= 0 ? '+' : ''}${dKm}km）` : ''}<br>
+      渋滞区間 ${(jam / 1000).toFixed(1)}km　通行止め情報 ${clos}件<br>
+      ${incHtml || '<span style="color:#888">事故・規制情報なし</span>'}
+    </div>`;
+  });
+
+  setData('casing', casing); setData('seg', seg); setData('inc', inc);
+  $('result').innerHTML = html;
+  map.fitBounds(bounds, {padding:60});
+};
+
+$('reset').onclick = () => {
+  markers.forEach(m => m.remove()); markers = []; start = end = null;
+  ['casing', 'seg', 'inc'].forEach(id => setData(id, []));
+  $('result').innerHTML = ''; $('status').innerHTML = '';
+  $('guide').innerHTML = '地図をクリックして <b>出発地</b> を置いてください。';
+  $('run').disabled = true;
+};
+</script>
+</body>
+</html>
