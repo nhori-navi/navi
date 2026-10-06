@@ -18,13 +18,17 @@ body{margin:0;font-family:sans-serif;font-size:15px}
 button,select,input{font-size:15px;padding:6px 10px;margin:3px 3px 3px 0}
 #search{width:55%}
 #next{font-size:21px;font-weight:bold;margin:2px 0}
-#summary{font-size:16px;margin:2px 0 4px}
+#summary{font-size:16px;margin:2px 0}
+#exitInfo{font-size:15px;color:#1f3a93;font-weight:bold;margin:2px 0 4px}
 #banner{display:none;background:#fff3cd;border:2px solid #e0a800;border-radius:8px;padding:8px;margin:6px 0;font-size:16px}
-.card{border:1px solid #ccc;border-radius:6px;padding:6px 8px;margin:6px 0;background:#fff;line-height:1.5}
+#verdict{background:#e8f0fe;border:2px solid #1f3a93;border-radius:8px;padding:8px;margin:6px 0;font-size:16px;font-weight:bold}
+#judgeBtn{background:#1f3a93;color:#fff;border:none;border-radius:6px}
+.card{border:1px solid #ccc;border-radius:6px;padding:6px 8px;margin:6px 0;background:#fff;line-height:1.6}
 .cur{border:2px solid #1f3a93}
 .inc{color:#8e44ad}
 .small{color:#777;font-size:12px}
 .hit{padding:8px;border-bottom:1px solid #ddd;cursor:pointer;background:#fff}
+details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px}
 </style>
 </head>
 <body>
@@ -32,26 +36,39 @@ button,select,input{font-size:15px;padding:6px 10px;margin:3px 3px 3px 0}
 <div id="panel">
   <div id="next">目的地を設定してください</div>
   <div id="summary"></div>
+  <div id="exitInfo"></div>
   <div id="banner">
     <div id="bannerText"></div>
     <button id="switchBtn">切り替える</button><button id="ignoreBtn">今回は見送る</button>
   </div>
   <div>
-    <button id="start" disabled>ナビ開始</button><button id="stop" disabled>停止</button><button id="followBtn">追従：ON</button>
+    <button id="start" disabled>ナビ開始</button><button id="stop" disabled>停止</button><button id="judgeBtn">判定</button><button id="followBtn">追従：ON</button>
   </div>
   <div>
     <input id="search" placeholder="目的地（住所・駅名など）"><button id="searchBtn">検索</button><button id="pickBtn">地図で指定</button>
   </div>
   <div id="hits"></div>
   <div id="guide" class="small">現在地を取得中…</div>
+  <div id="judgeOut"></div>
   <div id="incs"></div>
   <div id="cands"></div>
   <div class="small">
     提案する差：<select id="thr"><option>2</option><option selected>3</option><option>5</option><option>10</option></select>分以上
-    　確認間隔：<select id="interval"><option>1</option><option selected>2</option><option>3</option><option>5</option></select>分
+    　確認間隔：<select id="interval"><option>1</option><option selected>2</option><option>3</option><option>5</option></select>分<br>
+    遠回り1km＝<select id="wkm"><option>0</option><option>0.5</option><option selected>1</option><option>2</option></select>分の損とみなす
   </div>
+  <details>
+    <summary>出口（IC）の登録</summary>
+    <div class="small">出口は地図データから自動で拾いますが、確実にしたい出口は登録できます。「出口を登録」を押し、<b>料金所を出た先の一般道</b>をタップして名前を付けてください。</div>
+    <button id="icAddBtn">出口を登録</button>
+    <div id="icList"></div>
+    <div class="small">端末間で移すとき：書き出し → 文字をコピー → 別の端末に貼って読み込み</div>
+    <textarea id="icText" rows="3" style="width:100%"></textarea>
+    <button id="icExport">書き出し</button><button id="icImport">読み込み</button>
+  </details>
   <div class="small"><span id="status"></span>　<span id="counter">API利用 0回</span></div>
   <div id="err" class="small" style="color:#c00"></div>
+  <div class="small">出口データ © OpenStreetMap contributors</div>
 </div>
 <script>
 // ▼▼▼ ここにトークンを貼る（pk. で始まる文字列） ▼▼▼
@@ -73,9 +90,12 @@ const INC = {accident:'事故', congestion:'渋滞', construction:'工事', disa
 const MAX_REQ = 400;
 
 let reqCount = 0, pos = null, speed = null, dest = null, destMarker = null, posMarker = null;
-let pickMode = false, navOn = false, follow = true, active = null, proposal = null;
-let offCount = 0, busy = false, timer = null, wakeLock = null;
+let pickMode = false, icPick = false, navOn = false, follow = true, active = null, proposal = null;
+let offCount = 0, busy = false, judging = false, lastJudge = 0, timer = null, wakeLock = null;
+let preferGeneral = false;
 const spoken = new Set(), spokenInc = new Set(), ignored = {};
+let ics = [];
+try { ics = JSON.parse(localStorage.getItem('navi_ics') || '[]'); } catch (e) { ics = []; }
 
 // ---------- 共通 ----------
 function showErr(m) {
@@ -88,10 +108,13 @@ function speak(t) {
 function setData(id, f) { const s = map.getSource(id); if (s) s.setData({type:'FeatureCollection', features:f}); }
 function hhmm(sec) { return new Date(Date.now() + sec * 1000).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}); }
 function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.max(0, Math.round(m / 50) * 50) + 'm'; }
+const fmtKm = v => (v >= 0 ? '+' : '') + v.toFixed(1) + 'km';
+const sgn = v => (v > 0 ? '+' : '') + v;
+const wkm = () => Number($('wkm').value);
 async function keepAwake() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {} }
 document.addEventListener('visibilitychange', () => { if (navOn && document.visibilityState === 'visible') keepAwake(); });
 
-// ---------- 距離計算 ----------
+// ---------- 距離・方角の計算 ----------
 function distM(a, b) {
   const r = Math.PI / 180, x = (b[0] - a[0]) * r * Math.cos((a[1] + b[1]) / 2 * r), y = (b[1] - a[1]) * r;
   return Math.sqrt(x * x + y * y) * 6371000;
@@ -116,6 +139,11 @@ function along(c, p) {
   const n = nearest(c.coords, p), a = c.cum[n.i], b = c.cum[n.i + 1];
   return b === undefined ? a : a + n.t * (b - a);
 }
+function bearing(a, b) { const k = Math.cos(a[1] * Math.PI / 180); return Math.atan2((b[0] - a[0]) * k, b[1] - a[1]) * 180 / Math.PI; }
+function offsetPt(p, brg, d) {
+  const k = Math.cos(p[1] * Math.PI / 180) * 111320, m = 110540, r = brg * Math.PI / 180;
+  return [p[0] + Math.sin(r) * d / k, p[1] + Math.cos(r) * d / m];
+}
 const totalOf = c => c.cum[c.cum.length - 1];
 const remDist = c => pos ? Math.max(0, totalOf(c) - along(c, pos)) : totalOf(c);
 const remDur = c => totalOf(c) ? c.r.duration * remDist(c) / totalOf(c) : 0;
@@ -132,6 +160,50 @@ function sameAs(c, base) {
   for (let i = 0; i < pts.length; i += step) { n++; if (nearest(base.coords, pts[i]).d < 40) hit++; }
   return hit / n >= 0.85;
 }
+// 実質の得（分）：時間の短縮 − 遠回り距離×設定値
+function scoreGain(c) { return (remDur(active) - remDur(c)) / 60 - wkm() * (remDist(c) - remDist(active)) / 1000; }
+// 高速道路かどうか
+const isMwStep = s => (s.intersections || []).some(x => (x.classes || []).includes('motorway'));
+function curStepIdx(my) {
+  for (let s = 1; s < active.steps.length; s++) if (active.manAlong[s] > my + 5) return s - 1;
+  return Math.max(0, active.steps.length - 1);
+}
+function firstExitAlong(c) {
+  const st = (c.r.legs[0] && c.r.legs[0].steps) || [];
+  for (let i = 1; i < st.length; i++) {
+    if (isMwStep(st[i - 1]) && !isMwStep(st[i]))
+      return {a: along(c, st[i].maneuver.location), txt: st[i - 1].maneuver.instruction || st[i].maneuver.instruction || ''};
+  }
+  return null;
+}
+function earlyExit(c, my) {
+  const ce = firstExitAlong(c); if (!ce) return null;
+  const ae = firstExitAlong(active);
+  const activeExit = ae ? ae.a - my : totalOf(active) - my;
+  return ce.a < activeExit - 1000 ? (ce.txt || '途中の出口') : null;
+}
+// この先にある登録済み出口（ルートから1.5km以内）
+function exitsAhead(my) {
+  if (!active) return [];
+  return ics.map(ic => { const n = nearest(active.coords, ic.p); return {ic, off: n.d, a: active.cum[n.i] - my}; })
+    .filter(x => x.off < 1500 && x.a > 100).sort((a, b) => a.a - b.a);
+}
+// この先の最初の渋滞区間（15km以内）
+function jamSpan(my) {
+  const c = active; let i1 = -1;
+  for (let i = 0; i < c.coords.length - 1; i++) {
+    if (c.cum[i] < my) continue; if (c.cum[i] > my + 15000) break;
+    const g = c.cong[i]; if (g === 'heavy' || g === 'severe') { i1 = i; break; }
+  }
+  if (i1 < 0) return null;
+  let i2 = i1, gap = 0;
+  for (let i = i1 + 1; i < c.coords.length - 1; i++) {
+    const g = c.cong[i];
+    if (g === 'heavy' || g === 'severe') { i2 = i; gap = 0; } else if (++gap > 5) break;
+  }
+  if (c.cum[i2 + 1] - c.cum[i1] < 300) return null;
+  return {i1, i2: i2 + 1};
+}
 
 // ---------- 地図の準備 ----------
 map.on('load', () => {
@@ -141,7 +213,7 @@ map.on('load', () => {
     'line-color':['match',['get','congestion'],'low',COLORS.low,'moderate',COLORS.moderate,'heavy',COLORS.heavy,'severe',COLORS.severe,'#999'],
     'line-opacity':0.85}});
   const empty = {type:'FeatureCollection', features:[]};
-  ['casing', 'seg', 'prop', 'inc'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  ['casing', 'seg', 'prop', 'inc', 'ics'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
   map.addLayer({id:'prop', type:'line', source:'prop', layout:{'line-cap':'round'},
     paint:{'line-color':'#8e44ad', 'line-width':6, 'line-dasharray':[1.5, 1]}});
   map.addLayer({id:'casing', type:'line', source:'casing', layout:{'line-cap':'round','line-join':'round'},
@@ -150,13 +222,51 @@ map.on('load', () => {
     paint:{'line-color':['get','color'], 'line-width':5}});
   map.addLayer({id:'inc', type:'circle', source:'inc',
     paint:{'circle-radius':9, 'circle-color':'#8e44ad', 'circle-stroke-color':'#fff', 'circle-stroke-width':2}});
+  map.addLayer({id:'ics', type:'circle', source:'ics',
+    paint:{'circle-radius':7, 'circle-color':'#ff8c00', 'circle-stroke-color':'#fff', 'circle-stroke-width':2}});
+  map.addLayer({id:'icsLabel', type:'symbol', source:'ics',
+    layout:{'text-field':['get','name'], 'text-size':12, 'text-offset':[0, 1.3]},
+    paint:{'text-color':'#b35900', 'text-halo-color':'#fff', 'text-halo-width':1.5}});
+  renderIcs();
 });
 map.on('error', e => showErr('地図エラー：' + (e.error && e.error.message ? e.error.message : '不明')));
 map.on('dragstart', () => { if (navOn) { follow = false; $('followBtn').textContent = '追従：OFF'; } });
 map.on('click', e => {
-  if (!pickMode) return;
-  pickMode = false; setDest([e.lngLat.lng, e.lngLat.lat]);
+  const p = [e.lngLat.lng, e.lngLat.lat];
+  if (icPick) {
+    icPick = false;
+    const name = prompt('出口の名前（例：上野原IC）');
+    if (name && name.trim()) { ics.push({name: name.trim(), p}); saveIcs(); $('guide').textContent = name.trim() + 'を登録しました。'; }
+    return;
+  }
+  if (pickMode) { pickMode = false; setDest(p); }
 });
+
+// ---------- 出口の登録 ----------
+function saveIcs() {
+  try { localStorage.setItem('navi_ics', JSON.stringify(ics)); } catch (e) { showErr('出口の保存に失敗しました'); }
+  renderIcs();
+}
+function renderIcs() {
+  $('icList').innerHTML = ics.length
+    ? ics.map((ic, i) => `<div>${ic.name}　<button data-del="${i}">削除</button></div>`).join('')
+    : '<div class="small">まだ登録がありません</div>';
+  $('icList').querySelectorAll('button').forEach(b => b.onclick = () => {
+    const i = Number(b.dataset.del);
+    if (confirm(ics[i].name + 'を削除しますか？')) { ics.splice(i, 1); saveIcs(); }
+  });
+  setData('ics', ics.map(ic => ({type:'Feature', properties:{name: ic.name}, geometry:{type:'Point', coordinates: ic.p}})));
+}
+$('icAddBtn').onclick = () => { icPick = true; pickMode = false; $('guide').textContent = '料金所を出た先の一般道をタップしてください。'; };
+$('icExport').onclick = () => { $('icText').value = JSON.stringify(ics); };
+$('icImport').onclick = () => {
+  try {
+    const a = JSON.parse($('icText').value);
+    if (!Array.isArray(a)) throw 0;
+    ics = a.filter(x => x && x.name && Array.isArray(x.p)); saveIcs();
+    $('guide').textContent = '出口データを読み込みました。';
+  } catch (e) { showErr('読み込めない形式です'); }
+};
 
 // ---------- 現在地 ----------
 if ('geolocation' in navigator) {
@@ -178,7 +288,7 @@ function onPos(p) {
 }
 
 // ---------- 目的地 ----------
-$('pickBtn').onclick = () => { pickMode = true; $('guide').textContent = '地図上の目的地をタップしてください。'; };
+$('pickBtn').onclick = () => { pickMode = true; icPick = false; $('guide').textContent = '地図上の目的地をタップしてください。'; };
 $('searchBtn').onclick = async () => {
   const q = $('search').value.trim(); if (!q) return;
   const prox = pos ? `&proximity=${pos[0]},${pos[1]}` : '';
@@ -195,7 +305,7 @@ $('searchBtn').onclick = async () => {
   } catch (e) { showErr('検索エラー：' + e.message); }
 };
 function setDest(p) {
-  dest = p;
+  dest = p; preferGeneral = false;
   if (destMarker) destMarker.remove();
   destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
   $('guide').textContent = '目的地を設定しました。「ナビ開始」を押してください。';
@@ -241,7 +351,9 @@ function drawActive() {
 
 // ---------- 定期比較 ----------
 async function compare() {
-  if (!navOn || !pos || !dest || busy) return;
+  if (!navOn || !pos || !dest) return;
+  if (active && active.icLeg) return;
+  if (busy) { if (!active) setTimeout(compare, 3000); return; }
   busy = true; $('status').textContent = '渋滞状況を確認中…';
   try {
     let curP = Promise.resolve(null);
@@ -262,43 +374,46 @@ async function compare() {
     const cands = alts.concat(gens);
 
     if (!active) {
-      if (!cands.length) { $('status').textContent = 'ルートを取得できませんでした'; return; }
-      cands.sort((a, b) => a.r.duration - b.r.duration); setActive(cands[0]);
+      let pick = null;
+      if (preferGeneral && gens.length) pick = gens[0];
+      else if (cands.length) { cands.sort((a, b) => a.r.duration - b.r.duration); pick = cands[0]; }
+      if (!pick) { $('status').textContent = 'ルートを取得できませんでした'; return; }
+      setActive(pick);
     } else if (cur) setActive(cur);
     else { const m = cands.find(c => sameAs(c, active)); if (m) { m.name = active.name; setActive(m); } }
 
-    const curDur = remDur(active);
-    const others = cands.filter(c => !sameAs(c, active)).sort((a, b) => a.r.duration - b.r.duration);
-    renderCards(curDur, others);
-    checkProposal(curDur, others[0]);
+    const others = cands.filter(c => !sameAs(c, active)).sort((a, b) => scoreGain(b) - scoreGain(a));
+    renderCards(others);
+    checkProposal(others[0]);
     guide();
     $('status').textContent = '最終確認 ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+    if (jamAhead(active) >= 2000 && Date.now() - lastJudge > 5 * 60000) judge(true);
   } finally { busy = false; }
 }
-function renderCards(curDur, others) {
-  const curKm = remDist(active);
+function renderCards(others) {
+  const curDur = remDur(active), curKm = remDist(active);
   let h = `<div class="card cur"><b>現在のルート</b>（${active.name}）<br>
     到着 ${hhmm(curDur)}　残り${Math.round(curDur / 60)}分・${(curKm / 1000).toFixed(1)}km<br>
     この先の渋滞 ${(jamAhead(active) / 1000).toFixed(1)}km</div>`;
   others.forEach(c => {
-    const d = remDur(c), km = remDist(c), dm = Math.round((d - curDur) / 60), dk = ((km - curKm) / 1000).toFixed(1);
-    h += `<div class="card"><b>${c.name}</b>　${dm > 0 ? '+' : ''}${dm}分／距離 ${dk >= 0 ? '+' : ''}${dk}km<br>
-      到着 ${hhmm(d)}　渋滞 ${(jamAhead(c) / 1000).toFixed(1)}km</div>`;
+    const d = remDur(c), dm = Math.round((d - curDur) / 60), g = Math.round(scoreGain(c));
+    h += `<div class="card"><b>${c.name}</b>　${sgn(dm)}分／距離 ${fmtKm((remDist(c) - curKm) / 1000)}<br>
+      到着 ${hhmm(d)}　実質 ${g >= 0 ? g + '分有利' : -g + '分不利'}</div>`;
   });
   if (!others.length) h += '<div class="small">ほかの候補はありません</div>';
   $('cands').innerHTML = h;
 }
 function hideBanner() { $('banner').style.display = 'none'; proposal = null; setData('prop', []); }
-function checkProposal(curDur, best) {
-  const thr = Number($('thr').value) * 60;
-  if (!best || curDur - remDur(best) < thr || Date.now() < (ignored[best.name] || 0)) { hideBanner(); return; }
+function checkProposal(best) {
+  const thr = Number($('thr').value);
+  if (!best || scoreGain(best) < thr || Date.now() < (ignored[best.name] || 0)) { hideBanner(); return; }
   proposal = best;
-  const gain = Math.round((curDur - remDur(best)) / 60), dk = ((remDist(best) - remDist(active)) / 1000).toFixed(1);
-  $('bannerText').textContent = `${best.name}に切り替えると約${gain}分早く着きます（距離 ${dk >= 0 ? '+' : ''}${dk}km）`;
+  const tg = Math.round((remDur(active) - remDur(best)) / 60), dk = (remDist(best) - remDist(active)) / 1000;
+  $('bannerText').textContent = `${best.name}に切り替えると約${tg}分早く着きます（距離 ${fmtKm(dk)}、実質${Math.round(scoreGain(best))}分有利）`;
   $('banner').style.display = 'block';
   setData('prop', [{type:'Feature', properties:{}, geometry:best.r.geometry}]);
-  const key = 'p' + best.name + gain;
-  if (!spoken.has(key)) { spoken.add(key); speak(`より早いルートがあります。${best.name}で、約${gain}分早く着きます`); }
+  const key = 'p' + best.name + tg;
+  if (!spoken.has(key)) { spoken.add(key); speak(`より早いルートがあります。${best.name}で、約${tg}分早く着きます`); }
 }
 $('switchBtn').onclick = () => {
   if (!proposal) return;
@@ -307,6 +422,159 @@ $('switchBtn').onclick = () => {
 };
 $('ignoreBtn').onclick = () => { if (proposal) ignored[proposal.name] = Date.now() + 10 * 60000; hideBanner(); };
 
+// ---------- 出口の自動取得（OpenStreetMap）＋登録済み ----------
+async function findExits(my) {
+  const res = [];
+  exitsAhead(my).filter(x => x.a > 300 && x.a < 40000)
+    .forEach(x => res.push({name: x.ic.name, E: x.ic.p, a: x.a}));
+  try {
+    const pts = []; let next = my;
+    for (let i = 0; i < active.coords.length; i++) {
+      const a = active.cum[i];
+      if (a < my) continue; if (a > my + 40000) break;
+      if (a >= next) { pts.push(active.coords[i]); next = a + 1000; }
+    }
+    if (pts.length >= 2) {
+      const ll = pts.map(p => p[1].toFixed(5) + ',' + p[0].toFixed(5)).join(',');
+      const q = `[out:json][timeout:15];(node["highway"="motorway_junction"](around:150,${ll});node["barrier"="toll_booth"](around:2000,${ll}););out body;`;
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 12000);
+      const r = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:'data=' + encodeURIComponent(q),
+        headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal: ctl.signal});
+      clearTimeout(tm);
+      const els = (await r.json()).elements || [];
+      const booths = els.filter(e => e.tags && e.tags.barrier === 'toll_booth')
+        .map(e => [e.lon, e.lat]).filter(p => nearest(active.coords, p).d > 40);
+      els.filter(e => e.tags && e.tags.highway === 'motorway_junction').forEach(jn => {
+        const p = [jn.lon, jn.lat], a = active.cum[nearest(active.coords, p).i] - my;
+        if (a < 300 || a > 40000) return;
+        let best = null;
+        booths.forEach(b => { const d = distM(p, b); if (d < 1500 && (!best || d < best.d)) best = {b, d}; });
+        if (!best) return;
+        const name = jn.tags.name || jn.tags.ref || '出口';
+        if (res.some(x => Math.abs(x.a - a) < 1500 || x.name === name)) return;
+        res.push({name, E: best.b, a});
+      });
+    }
+  } catch (e) { showErr('出口の自動取得に失敗しました（登録済みの出口とMapboxの代替で判定します）'); }
+  return res.sort((x, y) => x.a - y.a).slice(0, 3);
+}
+
+// ---------- 判定 ----------
+async function judge(auto) {
+  if (!navOn || !active || !pos || !dest) { if (!auto) $('judgeOut').innerHTML = '<div class="small">ナビ開始後に使えます</div>'; return; }
+  if (judging) return;
+  if (active.icLeg) { if (!auto) $('judgeOut').innerHTML = '<div class="small">出口を出るまでは判定を止めています</div>'; return; }
+  judging = true; lastJudge = Date.now();
+  $('judgeOut').innerHTML = '<div class="small">判定中…</div>';
+  try {
+    const my = along(active, pos), st = active.steps[curStepIdx(my)];
+    const onMw = st ? isMwStep(st) : false;
+    let cands = onMw ? await highwayCands(my) : await generalCands(my);
+    const uniq = [];
+    cands.forEach(x => { if (x.pc && uniq.some(y => y.pc && sameAs(x.pc, y.pc))) return; uniq.push(x); });
+    decide(uniq, auto, onMw);
+  } finally { judging = false; }
+}
+async function highwayCands(my) {
+  const cands = [];
+  const altP = api([pos, dest], '&alternatives=true').then(rs => rs.map(r => prep(r, ''))).catch(e => { showErr(e.message); return []; });
+  const exits = await findExits(my);
+  const exP = Promise.all(exits.map(async ex => {
+    const [toE, after, rej] = await Promise.all([
+      api([pos, ex.E], '').then(r => r[0]).catch(() => null),
+      api([ex.E, dest], '&exclude=motorway').then(r => r[0]).catch(() => null),
+      api([pos, ex.E, dest], '&waypoints=0;2').then(r => r[0]).catch(() => null)
+    ]);
+    return {ex, toE, after, rej};
+  }));
+  const [alts, exRes] = await Promise.all([altP, exP]);
+  exRes.forEach(({ex, toE, after, rej}) => {
+    if (!toE || toE.distance > ex.a + 5000) return; // 逆方向の出口などは除外
+    if (after) cands.push({
+      label: `${ex.name}で降りて一般道（あと${fmtDist(ex.a)}）`,
+      dur: toE.duration + after.duration, dist: toE.distance + after.distance,
+      geom: toE.geometry.coordinates.concat(after.geometry.coordinates),
+      act: () => { const c = prep(toE, `${ex.name}で降りる`); c.icLeg = true; setActive(c); preferGeneral = true; }
+    });
+    if (rej) {
+      const c = prep(rej, `${ex.name}で降りる（その後おまかせ）`);
+      cands.push({label: `${ex.name}で降りて、その後おまかせ（乗り直しを含む）`, dur: rej.duration, dist: rej.distance,
+        geom: c.coords, act: () => setActive(c), pc: c});
+    }
+  });
+  alts.forEach(c => {
+    if (sameAs(c, active)) return;
+    const early = earlyExit(c, my);
+    c.name = early ? '早めに降りる案' : '別の高速ルート';
+    cands.push({label: early ? `早めに降りる案（${early}）` : '別の高速ルート', dur: c.r.duration, dist: c.r.distance,
+      geom: c.coords, act: () => setActive(c), pc: c});
+  });
+  return cands;
+}
+async function generalCands(my) {
+  const cands = [];
+  const altP = api([pos, dest], '&alternatives=true').then(rs => rs.map(r => prep(r, ''))).catch(e => { showErr(e.message); return []; });
+  let detP = Promise.resolve([]);
+  const jam = jamSpan(my);
+  if (jam) {
+    const a = active.coords[jam.i1], b = active.coords[jam.i2], mid = active.coords[Math.floor((jam.i1 + jam.i2) / 2)];
+    const brg = bearing(a, b);
+    const offs = [[-90, 1500, '左'], [-90, 3000, '左'], [90, 1500, '右'], [90, 3000, '右']];
+    detP = Promise.all(offs.map(([d, dist, side]) =>
+      api([pos, offsetPt(mid, brg + d, dist), dest], '&waypoints=0;2')
+        .then(r => ({c: prep(r[0], `${side}側へ迂回`), label: `渋滞を${side}側へ迂回（${dist / 1000}km外側）`}))
+        .catch(() => null)));
+  }
+  const [alts, dets] = await Promise.all([altP, detP]);
+  alts.forEach(c => {
+    if (sameAs(c, active)) return;
+    const usesMw = ((c.r.legs[0] && c.r.legs[0].steps) || []).some(isMwStep);
+    c.name = usesMw ? '高速に戻る' : '代替ルート';
+    cands.push({label: c.name, dur: c.r.duration, dist: c.r.distance, geom: c.coords, act: () => setActive(c), pc: c});
+  });
+  dets.forEach(x => {
+    if (!x || sameAs(x.c, active)) return;
+    cands.push({label: x.label, dur: x.c.r.duration, dist: x.c.r.distance, geom: x.c.coords, act: () => setActive(x.c), pc: x.c});
+  });
+  if (!jam) cands.noJam = true;
+  return cands;
+}
+function decide(cands, auto, onMw) {
+  const thr = Number($('thr').value), w = wkm();
+  const curDur = remDur(active), curDist = remDist(active);
+  cands.forEach(c => { c.tGain = (curDur - c.dur) / 60; c.dKm = (c.dist - curDist) / 1000; c.sGain = c.tGain - w * c.dKm; });
+  cands.sort((a, b) => b.sGain - a.sGain);
+  const best = cands[0];
+  let verdict, say, recommend = false;
+  if (best && best.sGain >= thr) {
+    recommend = true;
+    verdict = `判定：${best.label}が有利。このままより約${Math.round(best.tGain)}分早く、距離${fmtKm(best.dKm)}（実質${Math.round(best.sGain)}分有利）`;
+    say = `${best.label.replace(/（.*?）/g, '')}が有利です。約${Math.round(best.tGain)}分早く着きます`;
+    setData('prop', [{type:'Feature', properties:{}, geometry:{type:'LineString', coordinates: best.geom}}]);
+  } else {
+    verdict = '判定：差はわずかです。このままで問題ありません';
+    say = 'このままで問題ありません';
+    setData('prop', []);
+  }
+  let h = `<div id="verdict">${verdict}</div>
+    <div class="small">${onMw ? '高速道路上の判定' : '一般道上の判定'}${!onMw && cands.noJam ? '（この先15km以内に渋滞がないため、迂回候補は作っていません）' : ''}</div>
+    <div class="card cur"><b>このまま</b>（${active.name}）<br>到着 ${hhmm(curDur)}　残り${(curDist / 1000).toFixed(1)}km</div>`;
+  cands.forEach((c, i) => {
+    const g = Math.round(c.sGain);
+    h += `<div class="card"><b>${c.label}</b><br>
+      到着 ${hhmm(c.dur)}（${sgn(-Math.round(c.tGain))}分、距離${fmtKm(c.dKm)}）<br>
+      実質 ${g >= 0 ? g + '分有利' : -g + '分不利'}　<button data-c="${i}">この案で行く</button></div>`;
+  });
+  if (!cands.length) h += '<div class="small">比べられる候補が見つかりませんでした</div>';
+  $('judgeOut').innerHTML = h;
+  $('judgeOut').querySelectorAll('button[data-c]').forEach(b => b.onclick = () => {
+    cands[Number(b.dataset.c)].act(); hideBanner(); speak('ルートを切り替えました');
+    $('judgeOut').innerHTML = '<div class="small">切り替えました</div>';
+  });
+  if (!auto || recommend) speak(say);
+}
+$('judgeBtn').onclick = () => judge(false);
+
 // ---------- 走行中の案内 ----------
 function guide() {
   if (!active || !pos) return;
@@ -314,13 +582,16 @@ function guide() {
   if (n.d > 50) { offCount++; if (offCount >= 3 && !busy) { offCount = 0; speak('ルートを外れました。再検索します'); active = null; compare(); return; } }
   else offCount = 0;
   const my = along(active, pos), rem = totalOf(active) - my;
+  if (active.icLeg && rem < 150) { active = null; speak('一般道のルートで案内を続けます'); compare(); return; }
   if (rem < 40) { speak('目的地に到着しました'); stopNav(); $('next').textContent = '到着しました'; return; }
   const rd = remDur(active);
   $('summary').textContent = `到着 ${hhmm(rd)}　残り ${Math.round(rd / 60)}分・${fmtDist(rem)}`;
 
-  let k = -1;
-  for (let s = 1; s < active.steps.length; s++) if (active.manAlong[s] > my + 5) { k = s; break; }
-  if (k < 0) $('next').textContent = '目的地まで道なりです';
+  const exits = exitsAhead(my);
+  $('exitInfo').textContent = exits.length ? `次の出口：${exits[0].ic.name}　あと${fmtDist(exits[0].a)}` : '';
+
+  const k = curStepIdx(my) + 1;
+  if (k >= active.steps.length || !(active.manAlong[k] > my + 5)) $('next').textContent = '目的地まで道なりです';
   else {
     const st = active.steps[k], dist = active.manAlong[k] - my, ins = st.maneuver.instruction || '';
     $('next').textContent = `${fmtDist(dist)}先　${ins}`;
@@ -335,8 +606,13 @@ function guide() {
     const ahead = (active.cum[x.geometry_index_start || 0] || 0) - my;
     if (ahead < -50) return;
     const label = INC[x.type] || x.type;
-    h += `<div class="inc">● ${label}：${fmtDist(ahead)}先　${x.description || ''}${x.closed ? '（通行止め）' : ''}</div>`;
-    if (ahead < 10000 && !spokenInc.has(x.id)) { spokenInc.add(x.id); speak(`この先${fmtDist(ahead)}で、${label}の情報があります`); }
+    const pre = exits.filter(e => e.a < ahead).pop();
+    const preTxt = pre ? `<br>　手前の出口：${pre.ic.name}（あと${fmtDist(pre.a)}）` : '';
+    h += `<div class="inc">● ${label}：${fmtDist(ahead)}先　${x.description || ''}${x.closed ? '（通行止め）' : ''}${preTxt}</div>`;
+    if (ahead < 10000 && !spokenInc.has(x.id)) {
+      spokenInc.add(x.id);
+      speak(`この先${fmtDist(ahead)}で、${label}の情報があります` + (pre ? `。手前の出口は${pre.ic.name}です` : ''));
+    }
   });
   $('incs').innerHTML = h || '<span class="small">ルート上の事故・規制情報なし</span>';
 }
@@ -347,8 +623,8 @@ $('interval').onchange = () => { if (navOn) restartTimer(); };
 $('start').onclick = async () => {
   if (!pos) { showErr('現在地がまだ取得できていません。少し待ってから押してください。'); return; }
   if (!dest) return;
-  navOn = true; follow = true; $('followBtn').textContent = '追従：ON';
-  $('start').disabled = true; $('stop').disabled = false;
+  navOn = true; follow = true; preferGeneral = false; $('followBtn').textContent = '追従：ON';
+  $('start').disabled = true; $('stop').disabled = false; $('judgeOut').innerHTML = '';
   speak('ナビを開始します'); keepAwake();
   map.easeTo({center: pos, zoom: 15});
   active = null; await compare(); restartTimer();
@@ -357,7 +633,7 @@ function stopNav() {
   navOn = false; clearInterval(timer);
   try { if (wakeLock) wakeLock.release(); } catch (e) {}
   hideBanner(); $('start').disabled = !dest; $('stop').disabled = true;
-  $('status').textContent = '停止中';
+  $('exitInfo').textContent = ''; $('status').textContent = '停止中';
 }
 $('stop').onclick = () => { stopNav(); speak('ナビを終了します'); };
 $('followBtn').onclick = () => {
