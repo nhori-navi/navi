@@ -2,35 +2,56 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>自作ナビ 検証1</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自作ナビ</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
 <style>
-body{margin:0;font-family:sans-serif}
-#map{position:absolute;top:0;bottom:0;left:0;right:380px}
-#panel{position:absolute;top:0;bottom:0;right:0;width:380px;overflow:auto;padding:10px;box-sizing:border-box;background:#fafafa;border-left:1px solid #ccc;font-size:14px}
-button{font-size:15px;padding:6px 12px;margin:4px 4px 4px 0;cursor:pointer}
-.route{border:1px solid #ccc;border-radius:6px;padding:8px;margin:8px 0;background:#fff;line-height:1.6}
-.err{color:#c00;white-space:pre-wrap}
-.legend span{display:inline-block;width:16px;height:6px;margin:0 3px 2px 8px}
-.inc{color:#8e44ad}
-@media (max-width:700px){
-  #map{right:0;bottom:45%}
-  #panel{top:55%;width:100%;border-left:none;border-top:1px solid #ccc}
+*{box-sizing:border-box}
+body{margin:0;font-family:sans-serif;font-size:15px}
+#map{position:absolute;top:0;left:0;right:0;height:55%}
+#panel{position:absolute;top:55%;bottom:0;left:0;right:0;overflow:auto;padding:8px 10px;background:#fafafa;border-top:1px solid #ccc}
+@media (min-width:900px){
+  #map{height:auto;bottom:0;right:400px}
+  #panel{top:0;left:auto;width:400px;border-top:none;border-left:1px solid #ccc}
 }
+button,select,input{font-size:15px;padding:6px 10px;margin:3px 3px 3px 0}
+#search{width:55%}
+#next{font-size:21px;font-weight:bold;margin:2px 0}
+#summary{font-size:16px;margin:2px 0 4px}
+#banner{display:none;background:#fff3cd;border:2px solid #e0a800;border-radius:8px;padding:8px;margin:6px 0;font-size:16px}
+.card{border:1px solid #ccc;border-radius:6px;padding:6px 8px;margin:6px 0;background:#fff;line-height:1.5}
+.cur{border:2px solid #1f3a93}
+.inc{color:#8e44ad}
+.small{color:#777;font-size:12px}
+.hit{padding:8px;border-bottom:1px solid #ddd;cursor:pointer;background:#fff}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="panel">
-  <h3 style="margin:4px 0">自作ナビ 検証1</h3>
-  <div class="legend">渋滞：<span style="background:#2ecc71"></span>順調<span style="background:#f1c40f"></span>混雑<span style="background:#e67e22"></span>渋滞<span style="background:#c0392b"></span>大渋滞</div>
-  <p id="guide">地図をクリックして <b>出発地</b> を置いてください。</p>
-  <button id="run" disabled>ルートを比較</button>
-  <button id="reset">やり直す</button>
-  <div id="status"></div>
-  <div id="result"></div>
+  <div id="next">目的地を設定してください</div>
+  <div id="summary"></div>
+  <div id="banner">
+    <div id="bannerText"></div>
+    <button id="switchBtn">切り替える</button><button id="ignoreBtn">今回は見送る</button>
+  </div>
+  <div>
+    <button id="start" disabled>ナビ開始</button><button id="stop" disabled>停止</button><button id="followBtn">追従：ON</button>
+  </div>
+  <div>
+    <input id="search" placeholder="目的地（住所・駅名など）"><button id="searchBtn">検索</button><button id="pickBtn">地図で指定</button>
+  </div>
+  <div id="hits"></div>
+  <div id="guide" class="small">現在地を取得中…</div>
+  <div id="incs"></div>
+  <div id="cands"></div>
+  <div class="small">
+    提案する差：<select id="thr"><option>2</option><option selected>3</option><option>5</option><option>10</option></select>分以上
+    　確認間隔：<select id="interval"><option>1</option><option selected>2</option><option>3</option><option>5</option></select>分
+  </div>
+  <div class="small"><span id="status"></span>　<span id="counter">API利用 0回</span></div>
+  <div id="err" class="small" style="color:#c00"></div>
 </div>
 <script>
 // ▼▼▼ ここにトークンを貼る（pk. で始まる文字列） ▼▼▼
@@ -40,153 +61,308 @@ const TOKEN = 'pk.eyJ1IjoiaG9yaWhha28iLCJhIjoiY211djd0ejljMDA5ZjMycHYxaTY3M3BsdS
 mapboxgl.accessToken = TOKEN;
 const map = new mapboxgl.Map({
   container: 'map', style: 'mapbox://styles/mapbox/standard',
-  center: [139.12, 35.64], zoom: 10, language: 'ja'
+  center: [139.33, 35.62], zoom: 11, language: 'ja'
 });
-map.addControl(new mapboxgl.NavigationControl());
+map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
+const $ = id => document.getElementById(id);
 const COLORS = {low:'#2ecc71', moderate:'#f1c40f', heavy:'#e67e22', severe:'#c0392b', unknown:'#5dade2'};
 const INC = {accident:'事故', congestion:'渋滞', construction:'工事', disabled_vehicle:'故障車',
   lane_restriction:'車線規制', road_closure:'通行止め', road_hazard:'路上障害物', weather:'気象',
   planned_event:'イベント', mass_transit:'公共交通', other_news:'その他', miscellaneous:'その他'};
-const PAL = ['#1f3a93','#16a085','#d35400','#8e44ad','#2c3e50'];
+const MAX_REQ = 400;
 
-let start = null, end = null, markers = [];
-const $ = id => document.getElementById(id);
-const empty = {type:'FeatureCollection', features:[]};
-const setData = (id, f) => map.getSource(id).setData({type:'FeatureCollection', features:f});
-const showErr = m => { $('status').innerHTML += `<div class="err">${m}</div>`; };
+let reqCount = 0, pos = null, speed = null, dest = null, destMarker = null, posMarker = null;
+let pickMode = false, navOn = false, follow = true, active = null, proposal = null;
+let offCount = 0, busy = false, timer = null, wakeLock = null;
+const spoken = new Set(), spokenInc = new Set(), ignored = {};
 
-map.on('error', e => showErr('地図エラー：' + (e.error && e.error.message ? e.error.message : '不明')));
+// ---------- 共通 ----------
+function showErr(m) {
+  const t = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+  $('err').innerHTML = `<div>${t} ${m}</div>` + $('err').innerHTML.split('</div>').slice(0, 2).join('</div>');
+}
+function speak(t) {
+  try { const u = new SpeechSynthesisUtterance(t); u.lang = 'ja-JP'; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {}
+}
+function setData(id, f) { const s = map.getSource(id); if (s) s.setData({type:'FeatureCollection', features:f}); }
+function hhmm(sec) { return new Date(Date.now() + sec * 1000).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}); }
+function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.max(0, Math.round(m / 50) * 50) + 'm'; }
+async function keepAwake() { try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {} }
+document.addEventListener('visibilitychange', () => { if (navOn && document.visibilityState === 'visible') keepAwake(); });
 
+// ---------- 距離計算 ----------
+function distM(a, b) {
+  const r = Math.PI / 180, x = (b[0] - a[0]) * r * Math.cos((a[1] + b[1]) / 2 * r), y = (b[1] - a[1]) * r;
+  return Math.sqrt(x * x + y * y) * 6371000;
+}
+function segDist(p, a, b) {
+  const k = Math.cos(p[1] * Math.PI / 180) * 111320, m = 110540;
+  const ax = (a[0] - p[0]) * k, ay = (a[1] - p[1]) * m, bx = (b[0] - p[0]) * k, by = (b[1] - p[1]) * m;
+  const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+  let t = L ? -(ax * dx + ay * dy) / L : 0; t = Math.max(0, Math.min(1, t));
+  const x = ax + t * dx, y = ay + t * dy;
+  return {d: Math.sqrt(x * x + y * y), t};
+}
+function nearest(coords, p) {
+  let best = {d: 1e12, i: 0, t: 0};
+  for (let i = 0; i < coords.length - 1; i++) {
+    const s = segDist(p, coords[i], coords[i + 1]);
+    if (s.d < best.d) best = {d: s.d, i, t: s.t};
+  }
+  return best;
+}
+function along(c, p) {
+  const n = nearest(c.coords, p), a = c.cum[n.i], b = c.cum[n.i + 1];
+  return b === undefined ? a : a + n.t * (b - a);
+}
+const totalOf = c => c.cum[c.cum.length - 1];
+const remDist = c => pos ? Math.max(0, totalOf(c) - along(c, pos)) : totalOf(c);
+const remDur = c => totalOf(c) ? c.r.duration * remDist(c) / totalOf(c) : 0;
+function jamAhead(c) {
+  const n = pos ? nearest(c.coords, pos).i : 0; let j = 0;
+  for (let i = n; i < c.coords.length - 1; i++) {
+    const g = c.cong[i]; if (g === 'heavy' || g === 'severe') j += c.cum[i + 1] - c.cum[i];
+  }
+  return j;
+}
+function sameAs(c, base) {
+  if (!base || base.coords.length < 2) return false;
+  const pts = c.coords, step = Math.max(1, Math.floor(pts.length / 40)); let hit = 0, n = 0;
+  for (let i = 0; i < pts.length; i += step) { n++; if (nearest(base.coords, pts[i]).d < 40) hit++; }
+  return hit / n >= 0.85;
+}
+
+// ---------- 地図の準備 ----------
 map.on('load', () => {
   map.addSource('traffic', {type:'vector', url:'mapbox://mapbox.mapbox-traffic-v1'});
-  map.addLayer({id:'traffic', type:'line', source:'traffic', 'source-layer':'traffic',
-    paint:{
-      'line-width':['interpolate',['linear'],['zoom'],8,1.5,14,4],
-      'line-color':['match',['get','congestion'],
-        'low',COLORS.low,'moderate',COLORS.moderate,'heavy',COLORS.heavy,'severe',COLORS.severe,'#999'],
-      'line-opacity':0.85}});
-  map.addSource('casing', {type:'geojson', data:empty});
-  map.addLayer({id:'casing', type:'line', source:'casing',
-    layout:{'line-cap':'round','line-join':'round'},
-    paint:{'line-color':['get','color'], 'line-width':11}});
-  map.addSource('seg', {type:'geojson', data:empty});
-  map.addLayer({id:'seg', type:'line', source:'seg',
-    layout:{'line-cap':'round','line-join':'round'},
+  map.addLayer({id:'traffic', type:'line', source:'traffic', 'source-layer':'traffic', paint:{
+    'line-width':['interpolate',['linear'],['zoom'],8,1.5,14,4],
+    'line-color':['match',['get','congestion'],'low',COLORS.low,'moderate',COLORS.moderate,'heavy',COLORS.heavy,'severe',COLORS.severe,'#999'],
+    'line-opacity':0.85}});
+  const empty = {type:'FeatureCollection', features:[]};
+  ['casing', 'seg', 'prop', 'inc'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  map.addLayer({id:'prop', type:'line', source:'prop', layout:{'line-cap':'round'},
+    paint:{'line-color':'#8e44ad', 'line-width':6, 'line-dasharray':[1.5, 1]}});
+  map.addLayer({id:'casing', type:'line', source:'casing', layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':'#1f3a93', 'line-width':11}});
+  map.addLayer({id:'seg', type:'line', source:'seg', layout:{'line-cap':'round','line-join':'round'},
     paint:{'line-color':['get','color'], 'line-width':5}});
-  map.addSource('inc', {type:'geojson', data:empty});
   map.addLayer({id:'inc', type:'circle', source:'inc',
-    paint:{'circle-radius':9,'circle-color':'#8e44ad','circle-stroke-color':'#fff','circle-stroke-width':2}});
-  map.on('click', 'inc', e => {
-    new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(e.features[0].properties.text).addTo(map);
-  });
+    paint:{'circle-radius':9, 'circle-color':'#8e44ad', 'circle-stroke-color':'#fff', 'circle-stroke-width':2}});
 });
-
+map.on('error', e => showErr('地図エラー：' + (e.error && e.error.message ? e.error.message : '不明')));
+map.on('dragstart', () => { if (navOn) { follow = false; $('followBtn').textContent = '追従：OFF'; } });
 map.on('click', e => {
-  const p = [e.lngLat.lng, e.lngLat.lat];
-  if (!start) {
-    start = p; addMarker(p, '#27ae60');
-    $('guide').innerHTML = '次に <b>目的地</b> をクリックしてください。';
-  } else if (!end) {
-    end = p; addMarker(p, '#c0392b');
-    $('guide').innerHTML = '「ルートを比較」を押してください。';
-    $('run').disabled = false;
-  }
+  if (!pickMode) return;
+  pickMode = false; setDest([e.lngLat.lng, e.lngLat.lat]);
 });
 
-function addMarker(p, color) {
-  markers.push(new mapboxgl.Marker({color}).setLngLat(p).addTo(map));
+// ---------- 現在地 ----------
+if ('geolocation' in navigator) {
+  navigator.geolocation.watchPosition(onPos, e => showErr('位置情報エラー：' + e.message),
+    {enableHighAccuracy: true, maximumAge: 2000, timeout: 20000});
+} else showErr('この端末では位置情報が使えません');
+
+function onPos(p) {
+  pos = [p.coords.longitude, p.coords.latitude]; speed = p.coords.speed;
+  if (!posMarker) {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:#1e90ff;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5)';
+    posMarker = new mapboxgl.Marker({element: el}).setLngLat(pos).addTo(map);
+    if (!navOn) map.jumpTo({center: pos, zoom: 13});
+    if (!dest) $('guide').textContent = '目的地を検索するか、「地図で指定」を押して地図をタップしてください。';
+  } else posMarker.setLngLat(pos);
+  if (navOn && follow) map.easeTo({center: pos, duration: 800});
+  if (navOn && active) guide();
 }
 
-async function getRoutes(extra) {
-  const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${start.join(',')};${end.join(',')}`
-    + `?geometries=geojson&overview=full&annotations=congestion,distance&access_token=${TOKEN}${extra}`;
-  const res = await fetch(url);
-  const json = await res.json();
-  if (!res.ok || json.code !== 'Ok') throw new Error(`HTTP ${res.status} ${json.code || ''} ${json.message || ''}`);
-  return json.routes;
-}
-
-$('run').onclick = async () => {
-  $('run').disabled = true; $('status').innerHTML = '取得中…'; $('result').innerHTML = '';
-  const all = [];
-  const jobs = [['おまかせ', '&alternatives=true'], ['一般道のみ', '&exclude=motorway']];
-  let errs = '';
-  for (const [name, extra] of jobs) {
-    try {
-      const rs = await getRoutes(extra);
-      rs.forEach((r, i) => all.push({
-        name: name === 'おまかせ' ? (i === 0 ? 'おまかせ最速' : '代替ルート' + i) : name, r}));
-    } catch (e) { errs += `<div class="err">${name}：取得失敗（${e.message}）</div>`; }
-  }
-  $('status').innerHTML = errs;
-  if (!all.length) { $('run').disabled = false; return; }
-
-  all.sort((a, b) => a.r.duration - b.r.duration);
-  const best = all[0].r;
-  const casing = [], seg = [], inc = [], bounds = new mapboxgl.LngLatBounds();
-  let html = '';
-
-  all.forEach((o, k) => {
-    o.color = PAL[k % PAL.length];
-    const r = o.r, coords = r.geometry.coordinates;
-    coords.forEach(c => bounds.extend(c));
-    let cong = [], dist = [], incs = [], clos = 0;
-    r.legs.forEach(l => {
-      const a = l.annotation || {};
-      cong = cong.concat(a.congestion || []);
-      dist = dist.concat(a.distance || []);
-      (l.incidents || []).forEach(x => incs.push(x));
-      clos += (l.closures || []).length;
+// ---------- 目的地 ----------
+$('pickBtn').onclick = () => { pickMode = true; $('guide').textContent = '地図上の目的地をタップしてください。'; };
+$('searchBtn').onclick = async () => {
+  const q = $('search').value.trim(); if (!q) return;
+  const prox = pos ? `&proximity=${pos[0]},${pos[1]}` : '';
+  const url = `https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(q)}&country=jp&language=ja&limit=5${prox}&access_token=${TOKEN}`;
+  try {
+    const j = await (await fetch(url)).json(); $('hits').innerHTML = '';
+    (j.features || []).forEach(f => {
+      const d = document.createElement('div'); d.className = 'hit';
+      d.textContent = f.properties.full_address || f.properties.name;
+      d.onclick = () => { setDest(f.geometry.coordinates); $('hits').innerHTML = ''; };
+      $('hits').appendChild(d);
     });
-    const cum = [0];
-    dist.forEach((d, i) => cum.push(cum[i] + d));
-    let jam = 0;
-    for (let i = 0; i < coords.length - 1; i++) {
-      const c = cong[i] || 'unknown';
-      if (c === 'heavy' || c === 'severe') jam += dist[i] || 0;
-      seg.push({type:'Feature', properties:{color:COLORS[c] || COLORS.unknown},
-        geometry:{type:'LineString', coordinates:[coords[i], coords[i + 1]]}});
-    }
-    casing.unshift({type:'Feature', properties:{color:o.color}, geometry:r.geometry});
-
-    const min = Math.round(r.duration / 60);
-    const dMin = Math.round((r.duration - best.duration) / 60);
-    const km = (r.distance / 1000).toFixed(1);
-    const dKm = ((r.distance - best.distance) / 1000).toFixed(1);
-    const arr = new Date(Date.now() + r.duration * 1000)
-      .toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
-
-    let incHtml = '';
-    incs.forEach(x => {
-      const idx = x.geometry_index_start || 0;
-      const at = ((cum[idx] || 0) / 1000).toFixed(1);
-      const text = `${INC[x.type] || x.type}：${at}km先　${x.description || ''}${x.closed ? '（通行止め）' : ''}`;
-      incHtml += `<div class="inc">● ${text}</div>`;
-      if (coords[idx]) inc.push({type:'Feature', properties:{text},
-        geometry:{type:'Point', coordinates:coords[idx]}});
-    });
-
-    html += `<div class="route" style="border-left:10px solid ${o.color}">
-      <b>${o.name}</b>${k === 0 ? '　★最速' : ''}<br>
-      到着 ${arr}（${min}分${k ? `／+${dMin}分` : ''}）<br>
-      距離 ${km}km${k ? `（${dKm >= 0 ? '+' : ''}${dKm}km）` : ''}<br>
-      渋滞区間 ${(jam / 1000).toFixed(1)}km　通行止め情報 ${clos}件<br>
-      ${incHtml || '<span style="color:#888">事故・規制情報なし</span>'}
-    </div>`;
-  });
-
-  setData('casing', casing); setData('seg', seg); setData('inc', inc);
-  $('result').innerHTML = html;
-  map.fitBounds(bounds, {padding:60});
+    if (!(j.features || []).length) $('hits').textContent = '見つかりませんでした。住所で試すか「地図で指定」を使ってください。';
+  } catch (e) { showErr('検索エラー：' + e.message); }
 };
+function setDest(p) {
+  dest = p;
+  if (destMarker) destMarker.remove();
+  destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
+  $('guide').textContent = '目的地を設定しました。「ナビ開始」を押してください。';
+  if (!navOn) $('start').disabled = false; else { active = null; compare(); }
+}
 
-$('reset').onclick = () => {
-  markers.forEach(m => m.remove()); markers = []; start = end = null;
-  ['casing', 'seg', 'inc'].forEach(id => setData(id, []));
-  $('result').innerHTML = ''; $('status').innerHTML = '';
-  $('guide').innerHTML = '地図をクリックして <b>出発地</b> を置いてください。';
-  $('run').disabled = true;
+// ---------- 経路取得 ----------
+async function api(list, extra) {
+  if (reqCount >= MAX_REQ) throw new Error('利用回数の上限に達しました（再読み込みでリセット）');
+  reqCount++; $('counter').textContent = `API利用 ${reqCount}回`;
+  const c = list.map(p => p[0].toFixed(6) + ',' + p[1].toFixed(6)).join(';');
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${c}?geometries=geojson&overview=full&steps=true&language=ja&annotations=congestion&access_token=${TOKEN}${extra}`;
+  const res = await fetch(url), j = await res.json();
+  if (!res.ok || j.code !== 'Ok') throw new Error(`経路取得失敗 HTTP ${res.status} ${j.code || ''} ${j.message || ''}`);
+  return j.routes;
+}
+function prep(r, name) {
+  const coords = r.geometry.coordinates, cum = [0];
+  for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + distM(coords[i - 1], coords[i]));
+  let cong = [], incs = [];
+  r.legs.forEach(l => {
+    cong = cong.concat((l.annotation && l.annotation.congestion) || []);
+    (l.incidents || []).forEach(x => incs.push(x));
+  });
+  return {r, name, coords, cum, cong, incs};
+}
+function setActive(c) {
+  active = c;
+  active.steps = (c.r.legs[0] && c.r.legs[0].steps) || [];
+  active.manAlong = active.steps.map(s => along(c, s.maneuver.location));
+  drawActive();
+}
+function drawActive() {
+  const c = active, seg = [], pts = [];
+  for (let i = 0; i < c.coords.length - 1; i++)
+    seg.push({type:'Feature', properties:{color: COLORS[c.cong[i]] || COLORS.unknown},
+      geometry:{type:'LineString', coordinates:[c.coords[i], c.coords[i + 1]]}});
+  c.incs.forEach(x => { const p = c.coords[x.geometry_index_start || 0];
+    if (p) pts.push({type:'Feature', properties:{}, geometry:{type:'Point', coordinates:p}}); });
+  setData('casing', [{type:'Feature', properties:{}, geometry:c.r.geometry}]);
+  setData('seg', seg); setData('inc', pts);
+}
+
+// ---------- 定期比較 ----------
+async function compare() {
+  if (!navOn || !pos || !dest || busy) return;
+  busy = true; $('status').textContent = '渋滞状況を確認中…';
+  try {
+    let curP = Promise.resolve(null);
+    if (active) {
+      const n = nearest(active.coords, pos), here = active.cum[n.i], total = totalOf(active);
+      if (total - here > 2000) {
+        const target = here + (total - here) * 0.5; let j = n.i;
+        while (j < active.coords.length - 1 && active.cum[j] < target) j++;
+        const nm = active.name;
+        curP = api([pos, active.coords[j], dest], '&waypoints=0;2').then(rs => prep(rs[0], nm)).catch(e => { showErr(e.message); return null; });
+      }
+    }
+    const altP = api([pos, dest], '&alternatives=true')
+      .then(rs => rs.map((r, i) => prep(r, i ? '代替ルート' + i : 'おまかせ最速'))).catch(e => { showErr(e.message); return []; });
+    const genP = api([pos, dest], '&exclude=motorway')
+      .then(rs => [prep(rs[0], '一般道のみ')]).catch(e => { showErr(e.message); return []; });
+    const [cur, alts, gens] = await Promise.all([curP, altP, genP]);
+    const cands = alts.concat(gens);
+
+    if (!active) {
+      if (!cands.length) { $('status').textContent = 'ルートを取得できませんでした'; return; }
+      cands.sort((a, b) => a.r.duration - b.r.duration); setActive(cands[0]);
+    } else if (cur) setActive(cur);
+    else { const m = cands.find(c => sameAs(c, active)); if (m) { m.name = active.name; setActive(m); } }
+
+    const curDur = remDur(active);
+    const others = cands.filter(c => !sameAs(c, active)).sort((a, b) => a.r.duration - b.r.duration);
+    renderCards(curDur, others);
+    checkProposal(curDur, others[0]);
+    guide();
+    $('status').textContent = '最終確認 ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+  } finally { busy = false; }
+}
+function renderCards(curDur, others) {
+  const curKm = remDist(active);
+  let h = `<div class="card cur"><b>現在のルート</b>（${active.name}）<br>
+    到着 ${hhmm(curDur)}　残り${Math.round(curDur / 60)}分・${(curKm / 1000).toFixed(1)}km<br>
+    この先の渋滞 ${(jamAhead(active) / 1000).toFixed(1)}km</div>`;
+  others.forEach(c => {
+    const d = remDur(c), km = remDist(c), dm = Math.round((d - curDur) / 60), dk = ((km - curKm) / 1000).toFixed(1);
+    h += `<div class="card"><b>${c.name}</b>　${dm > 0 ? '+' : ''}${dm}分／距離 ${dk >= 0 ? '+' : ''}${dk}km<br>
+      到着 ${hhmm(d)}　渋滞 ${(jamAhead(c) / 1000).toFixed(1)}km</div>`;
+  });
+  if (!others.length) h += '<div class="small">ほかの候補はありません</div>';
+  $('cands').innerHTML = h;
+}
+function hideBanner() { $('banner').style.display = 'none'; proposal = null; setData('prop', []); }
+function checkProposal(curDur, best) {
+  const thr = Number($('thr').value) * 60;
+  if (!best || curDur - remDur(best) < thr || Date.now() < (ignored[best.name] || 0)) { hideBanner(); return; }
+  proposal = best;
+  const gain = Math.round((curDur - remDur(best)) / 60), dk = ((remDist(best) - remDist(active)) / 1000).toFixed(1);
+  $('bannerText').textContent = `${best.name}に切り替えると約${gain}分早く着きます（距離 ${dk >= 0 ? '+' : ''}${dk}km）`;
+  $('banner').style.display = 'block';
+  setData('prop', [{type:'Feature', properties:{}, geometry:best.r.geometry}]);
+  const key = 'p' + best.name + gain;
+  if (!spoken.has(key)) { spoken.add(key); speak(`より早いルートがあります。${best.name}で、約${gain}分早く着きます`); }
+}
+$('switchBtn').onclick = () => {
+  if (!proposal) return;
+  setActive(proposal); hideBanner(); speak('ルートを切り替えました');
+  $('cands').innerHTML = '<div class="small">切り替えました。次回の確認で一覧を更新します。</div>';
+};
+$('ignoreBtn').onclick = () => { if (proposal) ignored[proposal.name] = Date.now() + 10 * 60000; hideBanner(); };
+
+// ---------- 走行中の案内 ----------
+function guide() {
+  if (!active || !pos) return;
+  const n = nearest(active.coords, pos);
+  if (n.d > 50) { offCount++; if (offCount >= 3 && !busy) { offCount = 0; speak('ルートを外れました。再検索します'); active = null; compare(); return; } }
+  else offCount = 0;
+  const my = along(active, pos), rem = totalOf(active) - my;
+  if (rem < 40) { speak('目的地に到着しました'); stopNav(); $('next').textContent = '到着しました'; return; }
+  const rd = remDur(active);
+  $('summary').textContent = `到着 ${hhmm(rd)}　残り ${Math.round(rd / 60)}分・${fmtDist(rem)}`;
+
+  let k = -1;
+  for (let s = 1; s < active.steps.length; s++) if (active.manAlong[s] > my + 5) { k = s; break; }
+  if (k < 0) $('next').textContent = '目的地まで道なりです';
+  else {
+    const st = active.steps[k], dist = active.manAlong[k] - my, ins = st.maneuver.instruction || '';
+    $('next').textContent = `${fmtDist(dist)}先　${ins}`;
+    const key = st.maneuver.location.map(v => v.toFixed(4)).join(',');
+    const far = (speed && speed > 20) ? 1000 : 300;
+    if (dist <= far && dist > 120 && !spoken.has(key + 'f')) { spoken.add(key + 'f'); speak(`${fmtDist(dist)}先、${ins}`); }
+    if (dist <= 80 && !spoken.has(key + 'n')) { spoken.add(key + 'n'); speak(ins); }
+  }
+
+  let h = '';
+  active.incs.forEach(x => {
+    const ahead = (active.cum[x.geometry_index_start || 0] || 0) - my;
+    if (ahead < -50) return;
+    const label = INC[x.type] || x.type;
+    h += `<div class="inc">● ${label}：${fmtDist(ahead)}先　${x.description || ''}${x.closed ? '（通行止め）' : ''}</div>`;
+    if (ahead < 10000 && !spokenInc.has(x.id)) { spokenInc.add(x.id); speak(`この先${fmtDist(ahead)}で、${label}の情報があります`); }
+  });
+  $('incs').innerHTML = h || '<span class="small">ルート上の事故・規制情報なし</span>';
+}
+
+// ---------- 開始・停止 ----------
+function restartTimer() { clearInterval(timer); timer = setInterval(compare, Number($('interval').value) * 60000); }
+$('interval').onchange = () => { if (navOn) restartTimer(); };
+$('start').onclick = async () => {
+  if (!pos) { showErr('現在地がまだ取得できていません。少し待ってから押してください。'); return; }
+  if (!dest) return;
+  navOn = true; follow = true; $('followBtn').textContent = '追従：ON';
+  $('start').disabled = true; $('stop').disabled = false;
+  speak('ナビを開始します'); keepAwake();
+  map.easeTo({center: pos, zoom: 15});
+  active = null; await compare(); restartTimer();
+};
+function stopNav() {
+  navOn = false; clearInterval(timer);
+  try { if (wakeLock) wakeLock.release(); } catch (e) {}
+  hideBanner(); $('start').disabled = !dest; $('stop').disabled = true;
+  $('status').textContent = '停止中';
+}
+$('stop').onclick = () => { stopNav(); speak('ナビを終了します'); };
+$('followBtn').onclick = () => {
+  follow = !follow; $('followBtn').textContent = follow ? '追従：ON' : '追従：OFF';
+  if (follow && pos) map.easeTo({center: pos});
 };
 </script>
 </body>
