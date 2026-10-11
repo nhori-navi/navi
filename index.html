@@ -20,6 +20,13 @@ button,select,input{font-size:15px;padding:6px 10px;margin:3px 3px 3px 0}
 #next{font-size:21px;font-weight:bold;margin:2px 0}
 #summary{font-size:16px;margin:2px 0}
 #exitInfo{font-size:15px;color:#1f3a93;font-weight:bold;margin:2px 0 4px}
+#hwy{display:none;background:#fff;border:2px solid #2e7d32;border-radius:8px;padding:4px 8px;margin:6px 0}
+.fac{display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid #eee;font-size:15px}
+.fac:last-child{border-bottom:none}
+.fac .t{flex:none;min-width:34px;text-align:center;border-radius:4px;color:#fff;font-size:12px;font-weight:bold;padding:1px 3px}
+.fac .n{flex:1;font-weight:bold}
+.fac .d{flex:none;text-align:right;white-space:nowrap}
+.jam{color:#c0392b;font-size:12px;padding:0 0 2px 40px}
 #banner{display:none;background:#fff3cd;border:2px solid #e0a800;border-radius:8px;padding:8px;margin:6px 0;font-size:16px}
 #verdict{background:#e8f0fe;border:2px solid #1f3a93;border-radius:8px;padding:8px;margin:6px 0;font-size:16px;font-weight:bold}
 #judgeBtn{background:#1f3a93;color:#fff;border:none;border-radius:6px}
@@ -37,6 +44,7 @@ details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;pad
   <div id="next">目的地を設定してください</div>
   <div id="summary"></div>
   <div id="exitInfo"></div>
+  <div id="hwy"></div>
   <div id="banner">
     <div id="bannerText"></div>
     <button id="switchBtn">切り替える</button><button id="ignoreBtn">今回は見送る</button>
@@ -94,7 +102,7 @@ let pickMode = false, icPick = false, navOn = false, follow = true, active = nul
 let offCount = 0, busy = false, judging = false, lastJudge = 0, timer = null, wakeLock = null;
 let preferGeneral = false;
 let viaEntry = null, entryPending = false; // 選んだ入口（IC）／ナビ開始後に入口の比較を行う印
-const spoken = new Set(), spokenInc = new Set(), ignored = {};
+const spoken = new Set(), spokenInc = new Set(), spokenFac = new Set(), ignored = {};
 let ics = [];
 try { ics = JSON.parse(localStorage.getItem('navi_ics') || '[]'); } catch (e) { ics = []; }
 
@@ -147,7 +155,17 @@ function offsetPt(p, brg, d) {
 }
 const totalOf = c => c.cum[c.cum.length - 1];
 const remDist = c => pos ? Math.max(0, totalOf(c) - along(c, pos)) : totalOf(c);
-const remDur = c => totalOf(c) ? c.r.duration * remDist(c) / totalOf(c) : 0;
+// 道のりの位置 a までにかかる時間（秒）。区間ごとの所要時間があればそれで、なければ距離の割合で
+function timeAt(c, a) {
+  const T = totalOf(c); if (!T) return 0;
+  if (!c.ct) return c.r.duration * Math.min(a, T) / T;
+  let lo = 0, hi = c.cum.length - 1;
+  if (a <= 0) return 0; if (a >= T) return c.ct[hi];
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (c.cum[m] <= a) lo = m; else hi = m; }
+  const s = c.cum[hi] - c.cum[lo];
+  return c.ct[lo] + (s ? (a - c.cum[lo]) / s : 0) * (c.ct[hi] - c.ct[lo]);
+}
+const remDur = c => totalOf(c) ? timeAt(c, totalOf(c)) - (pos ? timeAt(c, along(c, pos)) : 0) : 0;
 function jamAhead(c) {
   const n = pos ? nearest(c.coords, pos).i : 0; let j = 0;
   for (let i = n; i < c.coords.length - 1; i++) {
@@ -340,7 +358,7 @@ async function api(list, extra) {
   if (reqCount >= MAX_REQ) throw new Error('利用回数の上限に達しました（再読み込みでリセット）');
   reqCount++; $('counter').textContent = `API利用 ${reqCount}回`;
   const c = list.map(p => p[0].toFixed(6) + ',' + p[1].toFixed(6)).join(';');
-  const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${c}?geometries=geojson&overview=full&steps=true&language=ja&annotations=congestion&access_token=${TOKEN}${extra}`;
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${c}?geometries=geojson&overview=full&steps=true&language=ja&annotations=congestion,duration&access_token=${TOKEN}${extra}`;
   const res = await fetch(url), j = await res.json();
   if (!res.ok || j.code !== 'Ok') throw new Error(`経路取得失敗 HTTP ${res.status} ${j.code || ''} ${j.message || ''}`);
   return j.routes;
@@ -348,18 +366,26 @@ async function api(list, extra) {
 function prep(r, name) {
   const coords = r.geometry.coordinates, cum = [0];
   for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + distM(coords[i - 1], coords[i]));
-  let cong = [], incs = [];
+  let cong = [], incs = [], dur = [];
   r.legs.forEach(l => {
     cong = cong.concat((l.annotation && l.annotation.congestion) || []);
+    dur = dur.concat((l.annotation && l.annotation.duration) || []);
     (l.incidents || []).forEach(x => incs.push(x));
   });
-  return {r, name, coords, cum, cong, incs};
+  let ct = null;
+  if (dur.length === coords.length - 1) {
+    ct = [0]; dur.forEach((d, i) => ct.push(ct[i] + (Number(d) || 0)));
+    const k = ct[ct.length - 1] ? r.duration / ct[ct.length - 1] : 0; // 合計を経路全体の所要時間にそろえる
+    ct = k ? ct.map(v => v * k) : null;
+  }
+  return {r, name, coords, cum, cong, incs, ct};
 }
 function setActive(c) {
   active = c;
   active.steps = (c.r.legs[0] && c.r.legs[0].steps) || [];
   active.manAlong = active.steps.map(s => along(c, s.maneuver.location));
   drawActive();
+  prepFacilities(c);
 }
 function drawActive() {
   const c = active, seg = [], pts = [];
@@ -514,51 +540,159 @@ function entryName(n) {
   if (!/(IC|ＩＣ|インター|入口|ランプ)$/.test(n)) n += 'IC';
   return n;
 }
-// 料金所とICの位置は 0.25度（約25km）のマスごとに端末に保存し、90日は取り直さない
-const ENT_KEY = 'navi_entry_v1', ENT_T = 0.25, ENT_DAYS = 90, ENT_MAX = 60;
+// 料金所・IC・JCT・SA・PAの位置は 0.25度（約25km）のマスごとに端末に保存し、90日は取り直さない
+const OSM_KEY = 'navi_osm_v1', ENT_T = 0.25, ENT_DAYS = 90, ENT_MAX = 80;
 let entCache = {};
-try { entCache = JSON.parse(localStorage.getItem(ENT_KEY) || '{}') || {}; } catch (e) { entCache = {}; }
+try { entCache = JSON.parse(localStorage.getItem(OSM_KEY) || '{}') || {}; localStorage.removeItem('navi_entry_v1'); } catch (e) { entCache = {}; }
 function saveEntCache() {
   const keys = Object.keys(entCache).sort((a, b) => entCache[a].t - entCache[b].t);
   while (keys.length > ENT_MAX) delete entCache[keys.shift()];
   for (let k = 0; k < 5; k++) {
-    try { localStorage.setItem(ENT_KEY, JSON.stringify(entCache)); return; }
+    try { localStorage.setItem(OSM_KEY, JSON.stringify(entCache)); return; }
     catch (e) { const old = keys.shift(); if (!old) return; delete entCache[old]; }
   }
+}
+const tileOf = p => Math.floor(p[0] / ENT_T) + ',' + Math.floor(p[1] / ENT_T);
+// マス（"x,y" の一覧）のデータを返す。足りないマスだけ Overpass で取る
+async function loadTiles(keys) {
+  const now = Date.now();
+  const need = keys.filter(k => { const t = entCache[k]; return !t || now - t.t > ENT_DAYS * 864e5; });
+  let err = null;
+  if (need.length) {
+    const bbs = need.map(k => { const [x, y] = k.split(',').map(Number);
+      return [y * ENT_T, x * ENT_T, (y + 1) * ENT_T, (x + 1) * ENT_T].map(v => v.toFixed(3)).join(','); });
+    const u = f => '(' + bbs.map(bb => f + '(' + bb + ');').join('') + ')';
+    // 料金所（本線上の料金所は除く）、IC・JCTの分かれ目、SA・PA
+    const q = `[out:json][timeout:25];${u('node["barrier"="toll_booth"]')}->.b;way(bn.b)["highway"="motorway"]->.m;(.b; - node(w.m););out body;`
+      + `${u('node["highway"="motorway_junction"]')};out body;${u('nwr["highway"~"^(services|rest_area)$"]')};out center;`;
+    try {
+      const els = await overpass(q);
+      const fresh = {};
+      need.forEach(k => fresh[k] = {t: now, b: [], j: [], s: []});
+      els.forEach(e => {
+        if (!e.tags) return;
+        const lon = e.lon !== undefined ? e.lon : e.center && e.center.lon, lat = e.lat !== undefined ? e.lat : e.center && e.center.lat;
+        if (lon === undefined) return;
+        const t = fresh[tileOf([lon, lat])]; if (!t) return;
+        const ll = [Number(lon.toFixed(5)), Number(lat.toFixed(5))];
+        if (e.tags.barrier === 'toll_booth') t.b.push([ll[0], ll[1], e.tags.name || '']);
+        else if (e.tags.highway === 'motorway_junction' && (e.tags.name || e.tags.ref)) t.j.push([ll[0], ll[1], e.tags.name || e.tags.ref]);
+        else if (e.tags.highway === 'services' || e.tags.highway === 'rest_area')
+          t.s.push([ll[0], ll[1], e.tags.name || '', e.tags.highway === 'services' ? 'SA' : 'PA']);
+      });
+      Object.assign(entCache, fresh); saveEntCache();
+    } catch (e) { err = e; }
+  }
+  const b = [], j = [], sv = [];
+  keys.forEach(k => { const t = entCache[k]; if (t) { b.push(...t.b); j.push(...t.j); sv.push(...(t.s || [])); } });
+  return {b, j, s: sv, err, missing: keys.filter(k => !entCache[k]).length};
 }
 async function loadEntryTiles(R) {
   const dLat = R / 110540, dLon = R / (111320 * Math.cos(pos[1] * Math.PI / 180));
   const x0 = Math.floor((pos[0] - dLon) / ENT_T), x1 = Math.floor((pos[0] + dLon) / ENT_T);
   const y0 = Math.floor((pos[1] - dLat) / ENT_T), y1 = Math.floor((pos[1] + dLat) / ENT_T);
-  const now = Date.now(), need = [], keys = [];
-  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
-    const k = x + ',' + y; keys.push(k);
-    const t = entCache[k]; if (!t || now - t.t > ENT_DAYS * 864e5) need.push([x, y]);
-  }
-  let err = null;
-  if (need.length) {
-    const xs = need.map(v => v[0]), ys = need.map(v => v[1]);
-    const bb = [Math.min(...ys) * ENT_T, Math.min(...xs) * ENT_T, (Math.max(...ys) + 1) * ENT_T, (Math.max(...xs) + 1) * ENT_T].map(v => v.toFixed(3)).join(',');
-    // 料金所（本線上の料金所は除く）と、IC・JCTの分かれ目
-    const q = `[out:json][timeout:25];node["barrier"="toll_booth"](${bb})->.b;way(bn.b)["highway"="motorway"]->.m;(.b; - node(w.m););out body;node["highway"="motorway_junction"](${bb});out body;`;
-    try {
-      const els = await overpass(q);
-      const fresh = {};
-      need.forEach(([x, y]) => fresh[x + ',' + y] = {t: now, b: [], j: []});
-      els.forEach(e => {
-        if (!e.tags) return;
-        const t = fresh[Math.floor(e.lon / ENT_T) + ',' + Math.floor(e.lat / ENT_T)]; if (!t) return;
-        const ll = [Number(e.lon.toFixed(5)), Number(e.lat.toFixed(5))];
-        if (e.tags.barrier === 'toll_booth') t.b.push([ll[0], ll[1], e.tags.name || '']);
-        else if (e.tags.highway === 'motorway_junction' && (e.tags.name || e.tags.ref)) t.j.push([ll[0], ll[1], e.tags.name || e.tags.ref]);
-      });
-      Object.assign(entCache, fresh); saveEntCache();
-    } catch (e) { err = e; }
-  }
-  const b = [], j = [];
-  keys.forEach(k => { const t = entCache[k]; if (t) { b.push(...t.b); j.push(...t.j); } });
-  return {b, j, err, missing: keys.filter(k => !entCache[k]).length};
+  const keys = [];
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) keys.push(x + ',' + y);
+  return loadTiles(keys);
 }
+
+// ---------- ハイウェイモード：この先のIC・JCT・SA・PA ----------
+let facBusy = false, facFailAt = 0;
+function facName(n, type) {
+  n = (n || '').trim().replace(/[（(][^）)]*[上下]り[^）)]*[）)]/g, '').replace(/サービスエリア/g, 'SA').replace(/パーキングエリア/g, 'PA').replace(/ジャンクション/g, 'JCT').trim();
+  if (type === 'IC' && !/(IC|ＩＣ|インター|出口|入口|ランプ)$/.test(n)) n += 'IC';
+  if ((type === 'SA' || type === 'PA') && !/(SA|PA|ハイウェイオアシス)$/.test(n)) n += type;
+  return n;
+}
+// 進行方向に対して左側なら正（日本は左側通行なので、自分の側のSA・PAは左にある）
+function sideOf(c, i, p) {
+  const a = c.coords[i], b = c.coords[i + 1] || a, k = Math.cos(a[1] * Math.PI / 180);
+  const vx = (b[0] - a[0]) * k, vy = b[1] - a[1], wx = (p[0] - a[0]) * k, wy = p[1] - a[1];
+  return vx * wy - vy * wx;
+}
+function buildFacilities(c, data) {
+  const list = [];
+  const add = (type, name, p, a) => {
+    if (!name || a < 0) return;
+    if (list.some(x => (x.name === name && Math.abs(x.a - a) < 3000) || (x.type === type && Math.abs(x.a - a) < 700))) return;
+    list.push({type, name, p, a});
+  };
+  const onMw = i => c.mw && c.mw[i];
+  data.j.forEach(v => {
+    const p = [v[0], v[1]], n = nearest(c.coords, p);
+    if (!onMw(n.i)) return;
+    // 分かれ目は自分の車線の上にある。少し離れていて右側なら反対車線のものなので除く
+    if (n.d > 60 || (n.d > 12 && sideOf(c, n.i, p) < 0)) return;
+    const raw = v[2], type = /JCT|ジャンクション/.test(raw) ? 'JCT' : /SA|サービスエリア/.test(raw) ? 'SA' : /PA|パーキングエリア/.test(raw) ? 'PA' : 'IC';
+    add(type, facName(raw, type), p, c.cum[n.i] + n.t * (c.cum[n.i + 1] - c.cum[n.i]));
+  });
+  data.s.forEach(v => {
+    const p = [v[0], v[1]], n = nearest(c.coords, p);
+    if (!onMw(n.i) || n.d > 500 || sideOf(c, n.i, p) < 0) return;
+    add(v[3], facName(v[2], v[3]), p, c.cum[n.i] + n.t * (c.cum[n.i + 1] - c.cum[n.i]));
+  });
+  // Mapbox の経路データにあるSA・PA・料金所も使う
+  c.steps.forEach(st => (st.intersections || []).forEach(x => {
+    const rs = x.rest_stop, tc = x.toll_collection;
+    if (rs && rs.name) { const type = rs.type === 'service_area' ? 'SA' : 'PA'; add(type, facName(rs.name, type), x.location, along(c, x.location)); }
+    if (tc && tc.type === 'toll_booth' && (x.classes || []).includes('motorway')) add('料金所', facName(tc.name || '本線料金所', ''), x.location, along(c, x.location));
+  }));
+  return list.sort((x, y) => x.a - y.a);
+}
+async function prepFacilities(c) {
+  c.steps = c.steps || (c.r.legs[0] && c.r.legs[0].steps) || [];
+  // 区間ごとに高速道路かどうか
+  c.mw = new Array(c.coords.length).fill(false);
+  let any = false;
+  c.steps.forEach(st => { if (!isMwStep(st)) return; any = true;
+    const a0 = along(c, st.maneuver.location), a1 = a0 + (st.distance || 0);
+    for (let i = 0; i < c.coords.length; i++) if (c.cum[i] >= a0 - 30 && c.cum[i] <= a1 + 30) c.mw[i] = true; });
+  if (!any) { c.fac = []; return; }
+  const keys = []; let next = 0;
+  for (let i = 0; i < c.coords.length; i++) if (c.mw[i] && c.cum[i] >= next) { const k = tileOf(c.coords[i]); if (!keys.includes(k)) keys.push(k); next = c.cum[i] + 2000; }
+  const ready = keys.every(k => entCache[k]);
+  if (ready || facBusy || Date.now() - facFailAt < 5 * 60000) {
+    c.fac = buildFacilities(c, await loadTiles(keys.filter(k => entCache[k])));
+    return;
+  }
+  facBusy = true;
+  try {
+    const data = await loadTiles(keys);
+    if (data.err) { facFailAt = Date.now(); showErr('IC・SA・PAの取得に失敗しました（' + data.err.message + '）。経路データにある分だけ表示します'); }
+    c.fac = buildFacilities(c, data);
+  } finally { facBusy = false; }
+  if (c === active && pos) guide();
+}
+function facLabel(t) { return {IC: 'IC', JCT: 'JCT', SA: 'SA', PA: 'PA', '料金所': '料金'}[t] || t; }
+const FAC_COLOR = {IC: '#1f3a93', JCT: '#6c3483', SA: '#2e7d32', PA: '#558b2f', '料金所': '#7f8c8d'};
+function readName(n) { return n.replace(/SA$/, 'サービスエリア').replace(/PA$/, 'パーキングエリア').replace(/JCT$/, 'ジャンクション').replace(/IC$/, 'インターチェンジ'); }
+function jamBetween(c, a1, a2) {
+  let j = 0;
+  for (let i = 0; i < c.coords.length - 1; i++) {
+    if (c.cum[i + 1] <= a1) continue; if (c.cum[i] >= a2) break;
+    const g = c.cong[i]; if (g === 'heavy' || g === 'severe') j += Math.min(c.cum[i + 1], a2) - Math.max(c.cum[i], a1);
+  }
+  return j;
+}
+function renderHighway(my, onMw) {
+  const box = $('hwy');
+  const ahead = onMw && active.fac ? active.fac.filter(f => f.a > my + 50).slice(0, 5) : [];
+  if (!ahead.length) { box.style.display = 'none'; return; }
+  const t0 = timeAt(active, my);
+  let h = '', prev = my;
+  ahead.forEach(f => {
+    const jam = jamBetween(active, prev, f.a);
+    if (jam >= 300) h += `<div class="jam">▲ 渋滞 ${(jam / 1000).toFixed(1)}km</div>`;
+    h += `<div class="fac"><span class="t" style="background:${FAC_COLOR[f.type] || '#555'}">${facLabel(f.type)}</span>`
+      + `<span class="n">${f.name}</span><span class="d">${fmtDist(f.a - my)}　${hhmm(timeAt(active, f.a) - t0)}</span></div>`;
+    prev = f.a;
+  });
+  box.innerHTML = h; box.style.display = 'block';
+  // SA・PA・JCTは2km手前で読み上げ
+  const f = ahead.find(x => (x.type === 'SA' || x.type === 'PA' || x.type === 'JCT') && x.a - my <= 2000 && x.a - my > 300);
+  if (f && !spokenFac.has(f.name)) { spokenFac.add(f.name); speak(`この先${fmtDist(f.a - my)}、${readName(f.name)}です`); }
+}
+
 async function findEntries() {
   const D = distM(pos, dest);
   if (D < 10000) return [];
@@ -770,6 +904,9 @@ function guide() {
     else $('exitInfo').textContent = `乗る入口：${viaEntry.name}　あと${fmtDist(va)}`;
   }
 
+  const st0 = active.steps[curStepIdx(my)];
+  renderHighway(my, st0 ? isMwStep(st0) : false);
+
   const k = curStepIdx(my) + 1;
   if (k >= active.steps.length || !(active.manAlong[k] > my + 5)) $('next').textContent = '目的地まで道なりです';
   else {
@@ -813,7 +950,7 @@ $('start').onclick = async () => {
 function stopNav() {
   navOn = false; clearInterval(timer); viaEntry = null; entryPending = false;
   try { if (wakeLock) wakeLock.release(); } catch (e) {}
-  hideBanner(); $('start').disabled = !dest; $('stop').disabled = true;
+  hideBanner(); $('start').disabled = !dest; $('stop').disabled = true; $('hwy').style.display = 'none';
   $('exitInfo').textContent = ''; $('status').textContent = '停止中';
 }
 $('stop').onclick = () => { stopNav(); speak('ナビを終了します'); };
