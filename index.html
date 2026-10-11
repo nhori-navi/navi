@@ -290,21 +290,43 @@ function onPos(p) {
 
 // ---------- 目的地 ----------
 $('pickBtn').onclick = () => { pickMode = true; icPick = false; $('guide').textContent = '地図上の目的地をタップしてください。'; };
+// 目的地の検索：まず施設・駅も探せる検索（Search Box）、だめなら住所の検索（Geocoding）
+async function searchPlaces(q) {
+  const prox = pos ? `&proximity=${pos[0].toFixed(5)},${pos[1].toFixed(5)}` : '';
+  const qs = `q=${encodeURIComponent(q)}&country=jp&language=ja&limit=7${prox}&access_token=${TOKEN}`;
+  let feats = [];
+  try {
+    const r = await fetch('https://api.mapbox.com/search/searchbox/v1/forward?' + qs);
+    const j = await r.json();
+    if (!r.ok) throw new Error(`HTTP ${r.status} ${j.message || ''}`);
+    feats = (j.features || []).map(f => ({p: f.geometry.coordinates, name: f.properties.name || '',
+      sub: f.properties.full_address || f.properties.place_formatted || '', poi: f.properties.feature_type === 'poi'}));
+  } catch (e) { showErr('施設の検索に失敗しました（' + e.message + '）。住所の検索で探します'); }
+  if (!feats.length) {
+    const j = await (await fetch('https://api.mapbox.com/search/geocode/v6/forward?' + qs.replace('limit=7', 'limit=5'))).json();
+    feats = (j.features || []).map(f => ({p: f.geometry.coordinates, name: f.properties.name || '',
+      sub: f.properties.full_address || f.properties.place_formatted || '', poi: false}));
+  }
+  return feats;
+}
 $('searchBtn').onclick = async () => {
   const q = $('search').value.trim(); if (!q) return;
-  const prox = pos ? `&proximity=${pos[0]},${pos[1]}` : '';
-  const url = `https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(q)}&country=jp&language=ja&limit=5${prox}&access_token=${TOKEN}`;
+  $('hits').innerHTML = '<div class="small">検索中…</div>';
   try {
-    const j = await (await fetch(url)).json(); $('hits').innerHTML = '';
-    (j.features || []).forEach(f => {
+    const feats = await searchPlaces(q); $('hits').innerHTML = '';
+    feats.forEach(f => {
       const d = document.createElement('div'); d.className = 'hit';
-      d.textContent = f.properties.full_address || f.properties.name;
-      d.onclick = () => { setDest(f.geometry.coordinates); $('hits').innerHTML = ''; };
+      const b = document.createElement('b'); b.textContent = (f.poi ? '📍' : '') + f.name;
+      const sm = document.createElement('div'); sm.className = 'small';
+      sm.textContent = f.sub && f.sub !== f.name ? f.sub : '';
+      d.append(b, sm);
+      d.onclick = () => { setDest(f.p); $('hits').innerHTML = ''; };
       $('hits').appendChild(d);
     });
-    if (!(j.features || []).length) $('hits').textContent = '見つかりませんでした。住所で試すか「地図で指定」を使ってください。';
-  } catch (e) { showErr('検索エラー：' + e.message); }
+    if (!feats.length) $('hits').textContent = '見つかりませんでした。住所で試すか「地図で指定」を使ってください。';
+  } catch (e) { $('hits').innerHTML = ''; showErr('検索エラー：' + e.message); }
 };
+$('search').addEventListener('keydown', e => { if (e.key === 'Enter') $('searchBtn').click(); });
 function setDest(p) {
   dest = p; preferGeneral = false; viaEntry = null;
   if (destMarker) destMarker.remove();
