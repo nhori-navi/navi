@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 <div id="map"></div>
@@ -45,7 +45,8 @@
   <div class="small" id="settings"><button class="q" data-q="settings">？</button>
     提案する差：<select id="thr"><option>2</option><option selected>3</option><option>5</option><option>10</option></select>分以上
     　確認間隔：<select id="interval"><option>1</option><option selected>2</option><option>3</option><option>5</option></select>分<br>
-    遠回り1km＝<select id="wkm"><option>0</option><option>0.5</option><option selected>1</option><option>2</option></select>分の損とみなす
+    遠回り1km＝<select id="wkm"><option>0</option><option>0.5</option><option selected>1</option><option>2</option></select>分の損とみなす<br>
+    心的負担の重み：<select id="bdw"><option value="0">なし</option><option value="0.5">弱</option><option value="1" selected>中</option><option value="2">強</option></select>
   </div>
   <details>
     <summary>出口（IC）の登録<button class="q" data-q="ics">？</button></summary>
@@ -60,11 +61,11 @@
   <div id="err" class="small" style="color:#c00"></div>
   <div class="small">出口データ © OpenStreetMap contributors</div>
 </div>
-<script src="core.js?v=1"></script>
-<script src="osm.js?v=1"></script>
-<script src="route.js?v=1"></script>
-<script src="nav.js?v=1"></script>
-<script src="help.js?v=1"></script>
-<script src="main.js?v=1"></script>
+<script src="core.js?v=2"></script>
+<script src="osm.js?v=2"></script>
+<script src="route.js?v=2"></script>
+<script src="nav.js?v=2"></script>
+<script src="help.js?v=2"></script>
+<script src="main.js?v=2"></script>
 </body>
 </html>
