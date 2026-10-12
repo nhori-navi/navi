@@ -45,6 +45,8 @@ function setDest(p) {
   destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
   $('guide').textContent = '目的地を設定しました。「ナビ開始」を押してください。';
   if (!navOn) $('start').disabled = false; else { active = null; compare(); }
+  // 入口探しに使う地図データを、ナビ開始の前に裏で取っておく
+  if (pos) prefetchEntries(Math.min(25000, Math.max(8000, distM(pos, p) * 0.4)));
 }
 
 // ---------- 出口の登録 ----------
@@ -81,6 +83,7 @@ function onPos(p) {
     el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:#1e90ff;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5)';
     posMarker = new mapboxgl.Marker({element: el}).setLngLat(pos).addTo(map);
     if (!navOn) map.jumpTo({center: pos, zoom: 13});
+    prefetchEntries(15000); // 近くの入口のデータを裏で取っておく
     if (!dest) $('guide').textContent = '目的地を検索するか、「地図で指定」を押して地図をタップしてください。';
   } else posMarker.setLngLat(pos);
   if (navOn && follow) map.easeTo({center: pos, duration: 800});
@@ -144,7 +147,7 @@ $('interval').onchange = () => { if (navOn) restartTimer(); };
 $('start').onclick = async () => {
   if (!pos) { showErr('現在地がまだ取得できていません。少し待ってから押してください。'); return; }
   if (!dest) return;
-  navOn = true; follow = true; preferGeneral = false; viaEntry = null; entryPending = true; $('followBtn').textContent = '追従：ON';
+  navOn = true; follow = true; preferGeneral = false; viaEntry = null; entryPending = true; entryRetry = 0; clearTimeout(entryRetryTimer); $('followBtn').textContent = '追従：ON';
   $('start').disabled = true; $('stop').disabled = false; $('judgeOut').innerHTML = '';
   speak('ナビを開始します'); keepAwake();
   map.easeTo({center: pos, zoom: 15});
@@ -152,7 +155,7 @@ $('start').onclick = async () => {
   if (active && !judging) judge(true);
 };
 function stopNav() {
-  navOn = false; clearInterval(timer); viaEntry = null; entryPending = false;
+  navOn = false; clearInterval(timer); clearTimeout(entryRetryTimer); viaEntry = null; entryPending = false;
   try { if (wakeLock) wakeLock.release(); } catch (e) {}
   hideBanner(); $('start').disabled = !dest; $('stop').disabled = true; $('hwy').style.display = 'none';
   $('exitInfo').textContent = ''; $('status').textContent = '停止中';

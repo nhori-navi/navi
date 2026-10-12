@@ -198,6 +198,11 @@ async function generalCands(my, withEntry) {
         .catch(() => null)));
   }
   const [alts, dets, ents] = await Promise.all([altP, detP, entP]);
+  // 入口の取得に失敗したら、2分後にもう一度（3回まで）
+  if (withEntry && entryFailed && entryRetry < ENTRY_RETRY_MAX) {
+    entryRetry++; clearTimeout(entryRetryTimer);
+    entryRetryTimer = setTimeout(() => { if (navOn && active && !judging) judge(true, true); }, 120000);
+  }
   ents.forEach(x => {
     if (sameAs(x.pc, active)) { cands.curEntry = x.name; return; }
     cands.push(x);
@@ -257,3 +262,4 @@ function decide(cands, auto, note, curEntry) {
   if (!auto || recommend) speak(say);
 }
 $('judgeBtn').onclick = () => judge(false, true);
+

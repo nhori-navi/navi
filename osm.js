@@ -1,27 +1,56 @@
 // KomuMiru：OpenStreetMap から出口・入口・IC・JCT・SA・PA を取る／ハイウェイモード
 
-// ---------- OpenStreetMap（Overpass）の取得：3か所に同時に頼み、最初に返ってきた答えを使う ----------
+// ---------- OpenStreetMap（Overpass）の取得 ----------
+// ・頼む順番：本家 → private.coffee → VK → kumi。返事が遅いと6秒ごとに次の所にも頼み、最初の答えを使う
+//   （全部に一度に頼むと、混んでいる所に負担をかけ、自分も断られやすくなるため）
+// ・このアプリからの問い合わせは1つずつ順番に行う（同時に頼むと断られやすい）。急ぐもの（入口・出口）が先
 const OVERPASS = [['https://overpass-api.de/api/interpreter', '本家'],
+  ['https://overpass.private.coffee/api/interpreter', 'coffee'],
   ['https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'VK'],
   ['https://overpass.kumi.systems/api/interpreter', 'kumi']];
-async function overpass(q) {
-  const reasons = [];
-  const one = async ([u, label]) => {
-    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 25000);
-    try {
-      const r = await fetch(u, {method:'POST', body:'data=' + encodeURIComponent(q),
-        headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal: ctl.signal});
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      let j; try { j = await r.json(); } catch (e) { throw new Error('応答が壊れていた'); }
-      if (j.remark && /error/i.test(j.remark)) throw new Error('混雑で打ち切り');
-      return j.elements || [];
-    } catch (e) {
-      reasons.push(label + '：' + (e.name === 'AbortError' ? '時間切れ' : e.name === 'TypeError' ? '接続できず' : e.message));
-      throw e;
-    } finally { clearTimeout(tm); }
-  };
-  try { return await Promise.any(OVERPASS.map(one)); }
-  catch (e) { throw new Error(reasons.join('、')); }
+const OP_WAIT = 45000, OP_STAGGER = 6000;
+function overpassRace(q) {
+  return new Promise((resolve, reject) => {
+    const reasons = [], ctls = []; let next = 0, done = false, failed = 0, timer = null;
+    const finish = () => { done = true; clearTimeout(timer); ctls.forEach(c => c.abort()); };
+    const launch = () => {
+      if (done || next >= OVERPASS.length) return;
+      const [u, label] = OVERPASS[next++];
+      const ctl = new AbortController(); ctls.push(ctl);
+      const tm = setTimeout(() => { ctl.timedOut = true; ctl.abort(); }, OP_WAIT);
+      clearTimeout(timer); timer = setTimeout(launch, OP_STAGGER);
+      (async () => {
+        const r = await fetch(u, {method:'POST', body:'data=' + encodeURIComponent(q),
+          headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal: ctl.signal});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        let j; try { j = await r.json(); } catch (e) { throw new Error('応答が壊れていた'); }
+        if (j.remark && /error/i.test(j.remark)) throw new Error('混雑で打ち切り');
+        return j.elements || [];
+      })().then(els => { if (!done) { finish(); resolve(els); } }, e => {
+        if (done) return;
+        reasons.push(label + '：' + (ctl.timedOut ? '時間切れ' : e.name === 'TypeError' ? '接続できず' : e.message));
+        if (++failed >= OVERPASS.length) { finish(); reject(new Error(reasons.join('、'))); }
+        else launch(); // 断られたら、待たずに次の所へ
+      }).finally(() => clearTimeout(tm));
+    };
+    launch();
+  });
+}
+const opQueue = []; let opRunning = false;
+// pri：0＝急ぐ（入口・出口）、1＝ハイウェイモード、2＝先読み
+function overpass(q, pri) {
+  return new Promise((res, rej) => {
+    opQueue.push({q, pri: pri || 0, res, rej});
+    opQueue.sort((a, b) => a.pri - b.pri);
+    opPump();
+  });
+}
+async function opPump() {
+  if (opRunning || !opQueue.length) return;
+  opRunning = true;
+  const job = opQueue.shift();
+  try { job.res(await overpassRace(job.q)); } catch (e) { job.rej(e); }
+  finally { opRunning = false; opPump(); }
 }
 
 // ---------- 出口の自動取得（OpenStreetMap）＋登録済み ----------
@@ -38,8 +67,8 @@ async function findExits(my) {
     }
     if (pts.length >= 2) {
       const ll = pts.map(p => p[1].toFixed(5) + ',' + p[0].toFixed(5)).join(',');
-      const q = `[out:json][timeout:15];(node["highway"="motorway_junction"](around:150,${ll});node["barrier"="toll_booth"](around:2000,${ll}););out body;`;
-      const els = await overpass(q);
+      const q = `[out:json][timeout:30];(node["highway"="motorway_junction"](around:150,${ll});node["barrier"="toll_booth"](around:2000,${ll}););out body;`;
+      const els = await overpass(q, 0);
       const booths = els.filter(e => e.tags && e.tags.barrier === 'toll_booth')
         .map(e => [e.lon, e.lat]).filter(p => nearest(active.coords, p).d > 40);
       els.filter(e => e.tags && e.tags.highway === 'motorway_junction').forEach(jn => {
@@ -77,20 +106,40 @@ function saveEntCache() {
   }
 }
 const tileOf = p => Math.floor(p[0] / ENT_T) + ',' + Math.floor(p[1] / ENT_T);
-// マス（"x,y" の一覧）のデータを返す。足りないマスだけ Overpass で取る
-async function loadTiles(keys) {
+// マス（"x,y" の一覧）のデータを返す。足りないマスだけ Overpass で取る（4マスずつ小分けにして、取れた分から保存）
+const tileLoading = {}; // 取りに行っている最中のマス（同じマスを二重に頼まない）
+let lastTileErr = null;  // 最後に失敗した理由
+async function loadTiles(keys, pri) {
   const now = Date.now();
-  const need = keys.filter(k => { const t = entCache[k]; return !t || now - t.t > ENT_DAYS * 864e5; });
+  const stale = k => { const t = entCache[k]; return !t || now - t.t > ENT_DAYS * 864e5; };
+  const need = keys.filter(k => stale(k) && !tileLoading[k]);
   let err = null;
-  if (need.length) {
+  for (let s = 0; s < need.length; s += 4) {
+    const part = need.slice(s, s + 4);
+    const p = fetchTiles(part, pri).catch(e => { err = e; lastTileErr = e; });
+    part.forEach(k => tileLoading[k] = p);
+  }
+  await Promise.all(keys.map(k => tileLoading[k]).filter(Boolean));
+  keys.forEach(k => { if (tileLoading[k] && !stale(k)) delete tileLoading[k]; });
+  need.forEach(k => delete tileLoading[k]);
+  const b = [], j = [], sv = [];
+  keys.forEach(k => { const t = entCache[k]; if (t) { b.push(...t.b); j.push(...t.j); sv.push(...(t.s || [])); } });
+  const missing = keys.filter(k => !entCache[k]).length;
+  // ほかの呼び出し（先読みなど）が取りに行って失敗したマスも、失敗として返す
+  if (missing && !err) err = lastTileErr || new Error('取得できませんでした');
+  return {b, j, s: sv, err, missing};
+}
+async function fetchTiles(need, pri) {
+  const now = Date.now();
+  {
     const bbs = need.map(k => { const [x, y] = k.split(',').map(Number);
       return [y * ENT_T, x * ENT_T, (y + 1) * ENT_T, (x + 1) * ENT_T].map(v => v.toFixed(3)).join(','); });
     const u = f => '(' + bbs.map(bb => f + '(' + bb + ');').join('') + ')';
     // 料金所（本線上の料金所は除く）、IC・JCTの分かれ目、SA・PA
-    const q = `[out:json][timeout:25];${u('node["barrier"="toll_booth"]')}->.b;way(bn.b)["highway"="motorway"]->.m;(.b; - node(w.m););out body;`
+    const q = `[out:json][timeout:40];${u('node["barrier"="toll_booth"]')}->.b;way(bn.b)["highway"="motorway"]->.m;(.b; - node(w.m););out body;`
       + `${u('node["highway"="motorway_junction"]')};out body;${u('nwr["highway"~"^(services|rest_area)$"]')};out center;`;
-    try {
-      const els = await overpass(q);
+    {
+      const els = await overpass(q, pri);
       const fresh = {};
       need.forEach(k => fresh[k] = {t: now, b: [], j: [], s: []});
       els.forEach(e => {
@@ -105,20 +154,23 @@ async function loadTiles(keys) {
           t.s.push([ll[0], ll[1], e.tags.name || '', e.tags.highway === 'services' ? 'SA' : 'PA']);
       });
       Object.assign(entCache, fresh); saveEntCache();
-    } catch (e) { err = e; }
+    }
   }
-  const b = [], j = [], sv = [];
-  keys.forEach(k => { const t = entCache[k]; if (t) { b.push(...t.b); j.push(...t.j); sv.push(...(t.s || [])); } });
-  return {b, j, s: sv, err, missing: keys.filter(k => !entCache[k]).length};
 }
-async function loadEntryTiles(R) {
+async function loadEntryTiles(R, pri) {
+  if (!pos) return {b: [], j: [], s: [], err: null, missing: 0};
   const dLat = R / 110540, dLon = R / (111320 * Math.cos(pos[1] * Math.PI / 180));
   const x0 = Math.floor((pos[0] - dLon) / ENT_T), x1 = Math.floor((pos[0] + dLon) / ENT_T);
   const y0 = Math.floor((pos[1] - dLat) / ENT_T), y1 = Math.floor((pos[1] + dLat) / ENT_T);
   const keys = [];
   for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) keys.push(x + ',' + y);
-  return loadTiles(keys);
+  // 現在地に近いマスから順に取る
+  const ctr = k => { const [x, y] = k.split(',').map(Number); return distM(pos, [(x + 0.5) * ENT_T, (y + 0.5) * ENT_T]); };
+  keys.sort((a, b) => ctr(a) - ctr(b));
+  return loadTiles(keys, pri || 0);
 }
+// 先読み：目的地を決めたときなどに、入口探しに使うマスを裏で取っておく（失敗しても知らせない）
+function prefetchEntries(R) { if (pos) loadEntryTiles(R || 15000, 2).catch(() => {}); }
 
 // ---------- ハイウェイモード：この先のIC・JCT・SA・PA ----------
 let facBusy = false, facFailAt = 0;
@@ -176,13 +228,13 @@ async function prepFacilities(c) {
   for (let i = 0; i < c.coords.length; i++) if (c.mw[i] && c.cum[i] >= next) { const k = tileOf(c.coords[i]); if (!keys.includes(k)) keys.push(k); next = c.cum[i] + 2000; }
   const ready = keys.every(k => entCache[k]);
   if (ready || facBusy || Date.now() - facFailAt < 5 * 60000) {
-    c.fac = buildFacilities(c, await loadTiles(keys.filter(k => entCache[k])));
+    c.fac = buildFacilities(c, await loadTiles(keys.filter(k => entCache[k]), 1));
     return;
   }
   facBusy = true;
   try {
-    const data = await loadTiles(keys);
-    if (data.err) { facFailAt = Date.now(); showErr('IC・SA・PAの取得に失敗しました（' + data.err.message + '）。経路データにある分だけ表示します'); }
+    const data = await loadTiles(keys, 1);
+    if (data.err && data.missing) { facFailAt = Date.now(); showErr('IC・SA・PAの取得に失敗しました（' + data.err.message + '）。経路データにある分だけ表示します'); }
     c.fac = buildFacilities(c, data);
   } finally { facBusy = false; }
   if (c === active && pos) guide();
@@ -217,6 +269,8 @@ function renderHighway(my, onMw) {
   if (f && !spokenFac.has(f.name)) { spokenFac.add(f.name); speak(`この先${fmtDist(f.a - my)}、${readName(f.name)}です`); }
 }
 
+let entryFailed = false, entryRetry = 0, entryRetryTimer = null;
+const ENTRY_RETRY_MAX = 3;
 async function findEntries() {
   const D = distM(pos, dest);
   if (D < 10000) return [];
@@ -225,9 +279,10 @@ async function findEntries() {
   const groups = [];
   ics.forEach(ic => { if (ok(ic.p)) groups.push({name: ic.name, c: ic.p, pts: [ic.p]}); });
   const R = Math.round(Math.min(25000, Math.max(8000, D * 0.4)));
-  const tiles = await loadEntryTiles(R);
-  if (tiles.err) showErr('入口（IC）の自動取得に失敗しました（' + tiles.err.message + '）。'
-    + (tiles.missing ? '登録済みの出口とMapboxの代替で比べます' : '前回保存した分で比べます'));
+  const tiles = await loadEntryTiles(R, 0);
+  entryFailed = !!(tiles.err && tiles.missing);
+  if (entryFailed) showErr('入口（IC）の自動取得に失敗しました（' + tiles.err.message + '）。'
+    + (entryRetry < ENTRY_RETRY_MAX ? '2分後にもう一度試します。それまでは' : '') + '登録済みの出口とMapboxの代替で比べます');
   const jns = tiles.j.filter(v => !isJct(v[2])).map(v => ({p: [v[0], v[1]], name: v[2]}));
   const osm = [];
   tiles.b.forEach(v => {
