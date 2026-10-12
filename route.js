@@ -203,8 +203,12 @@ async function generalCands(my, withEntry) {
     entryRetry++; clearTimeout(entryRetryTimer);
     entryRetryTimer = setTimeout(() => { if (navOn && active && !judging) judge(true, true); }, 120000);
   }
+  // 今のルートが乗る入口：同じ入口の案は「このまま」にまとめ、ほかの入口の案を並べる
+  const curIn = withEntry ? entryOf(active) : null;
+  if (curIn && curIn.name) cands.curEntry = curIn.name;
   ents.forEach(x => {
-    if (sameAs(x.pc, active)) { cands.curEntry = x.name; return; }
+    if (curIn && distM(x.p, curIn.p) < 2500) { cands.curEntry = x.name; return; }
+    if (sameAs(x.pc, active)) return;
     cands.push(x);
   });
   alts.forEach(c => {

@@ -88,11 +88,37 @@ function jamAhead(c) {
   }
   return j;
 }
+// 2つのルートが同じ道か：違う道を通る長さが合わせて1.5km未満、かつ9割以上が重なるとき「同じ」
+// （割合だけで見ると、200km のルートの最初の15kmだけ違う道でも「同じ」になってしまうため、長さでも見る）
 function sameAs(c, base) {
-  if (!base || base.coords.length < 2) return false;
-  const pts = c.coords, step = Math.max(1, Math.floor(pts.length / 40)); let hit = 0, n = 0;
-  for (let i = 0; i < pts.length; i += step) { n++; if (nearest(base.coords, pts[i]).d < 40) hit++; }
-  return hit / n >= 0.85;
+  if (!base || base.coords.length < 2 || c.coords.length < 2) return false;
+  const T = totalOf(c), step = Math.max(100, T / 300); let n = 0, miss = 0;
+  for (let a = 0; a <= T; a += step) { n++; if (nearD(base, pointAt(c, a)) >= 40) miss++; }
+  return miss * step < 1500 && miss / n <= 0.1;
+}
+// ルートの線を約100m四方のマス目に振り分けておき、近くのマスの線だけを調べて「一番近い距離」を速く出す
+const GRID = 0.001;
+function segGrid(c) {
+  if (c._grid) return c._grid;
+  const g = new Map();
+  for (let i = 0; i < c.coords.length - 1; i++) {
+    const a = c.coords[i], b = c.coords[i + 1], m = Math.max(1, Math.ceil(distM(a, b) / 50));
+    let last = '';
+    for (let k = 0; k <= m; k++) {
+      const key = Math.floor((a[0] + (b[0] - a[0]) * k / m) / GRID) + ',' + Math.floor((a[1] + (b[1] - a[1]) * k / m) / GRID);
+      if (key === last) continue; last = key;
+      const arr = g.get(key); if (!arr) g.set(key, [i]); else if (arr[arr.length - 1] !== i) arr.push(i);
+    }
+  }
+  return (c._grid = g);
+}
+function nearD(c, p) {
+  const g = segGrid(c), cx = Math.floor(p[0] / GRID), cy = Math.floor(p[1] / GRID); let best = 1e12;
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+    const arr = g.get((cx + dx) + ',' + (cy + dy)); if (!arr) continue;
+    for (const i of arr) { const d = segDist(p, c.coords[i], c.coords[i + 1]).d; if (d < best) best = d; }
+  }
+  return best;
 }
 // 実質の得（分）：時間の短縮 − 遠回り距離×設定値
 // 実質の得（分）：時間の短縮 − 遠回り距離×設定値 − 心的負担の増えた分×重み

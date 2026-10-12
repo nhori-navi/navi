@@ -305,6 +305,15 @@ async function findEntries() {
   return groups.sort((x, y) => score(x) - score(y)).slice(0, 5);
 }
 const isJct = n => /JCT|ジャンクション/.test(n || '');
+// ルートが高速に入る地点と、そこの入口（IC）の名前（登録した出口・保存したIC名から、2.5km以内で一番近いもの）
+function entryOf(c) {
+  const am = mwStartAlong(c); if (am < 0) return null;
+  const p = pointAt(c, am); let best = null;
+  const near = (q, name) => { const d = distM(q, p); if (d < 2500 && (!best || d < best.d)) best = {name, d}; };
+  ics.forEach(ic => near(ic.p, ic.name));
+  Object.values(entCache).forEach(t => (t.j || []).forEach(v => { if (!isJct(v[2])) near([v[0], v[1]], entryName(v[2])); }));
+  return {p, name: best ? best.name : null};
+}
 // ルートが初めて高速道路に入る地点（道のりの距離）。高速を使わないなら -1
 function mwStartAlong(c) {
   const st = (c.r.legs[0] && c.r.legs[0].steps) || [];
@@ -330,7 +339,7 @@ async function entryCands() {
     return null;
   }));
   return res.filter(Boolean).map(x => ({
-    label: `${x.name}から乗る（入口まで${fmtDist(x.ap)}）`, entry: true, name: x.name,
+    label: `${x.name}から乗る（入口まで${fmtDist(x.ap)}）`, entry: true, name: x.name, p: x.p,
     dur: x.c.r.duration, dist: x.c.r.distance, geom: x.c.coords, pc: x.c,
     act: () => { setActive(x.c); viaEntry = {p: x.p, name: x.name}; }
   }));
