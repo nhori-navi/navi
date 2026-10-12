@@ -95,12 +95,13 @@ function renderCards(others) {
   const curDur = remDur(active), curKm = remDist(active);
   let h = `<div class="card cur"><b>現在のルート</b>（${active.name}）<button class="q" data-q="cands">？</button><br>
     到着 ${hhmm(curDur)}　残り${Math.round(curDur / 60)}分・${(curKm / 1000).toFixed(1)}km<br>
-    この先の渋滞 ${(jamAhead(active) / 1000).toFixed(1)}km</div>`;
+    この先の渋滞 ${(jamAhead(active) / 1000).toFixed(1)}km<br><span class="small">${bdText(bdNow(active))}</span></div>`;
   others.forEach(c => {
     const d = remDur(c), dm = Math.round((d - curDur) / 60), g = Math.round(scoreGain(c));
     h += `<div class="card"><b>${c.name}</b>　${sgn(dm)}分／距離 ${fmtKm((remDist(c) - curKm) / 1000)}<br>
-      到着 ${hhmm(d)}　実質 ${g >= 0 ? g + '分有利' : -g + '分不利'}</div>`;
+      到着 ${hhmm(d)}　実質 ${g >= 0 ? g + '分有利' : -g + '分不利'}<br><span class="small">${bdText(bdNow(c))}</span></div>`;
   });
+  h += bdNote(active);
   if (!others.length) h += '<div class="small">ほかの候補はありません</div>';
   $('cands').innerHTML = h;
 }
@@ -110,7 +111,7 @@ function checkProposal(best) {
   if (!best || scoreGain(best) < thr || Date.now() < (ignored[best.name] || 0)) { hideBanner(); return; }
   proposal = best;
   const tg = Math.round((remDur(active) - remDur(best)) / 60), dk = (remDist(best) - remDist(active)) / 1000;
-  $('bannerText').textContent = `${best.name}に切り替えると約${tg}分早く着きます（距離 ${fmtKm(dk)}、実質${Math.round(scoreGain(best))}分有利）`;
+  $('bannerText').textContent = `${best.name}に切り替えると約${tg}分早く着きます（距離 ${fmtKm(dk)}、実質${Math.round(scoreGain(best))}分有利、${bdText(bdNow(best))}）`;
   $('banner').style.display = 'block';
   setData('prop', [{type:'Feature', properties:{}, geometry:best.r.geometry}]);
   const key = 'p' + best.name + tg;
@@ -162,6 +163,7 @@ async function highwayCands(my) {
       label: `${ex.name}で降りて一般道（あと${fmtDist(ex.a)}）`,
       dur: toE.duration + after.duration, dist: toE.distance + after.distance,
       geom: toE.geometry.coordinates.concat(after.geometry.coordinates),
+      bdParts: [prep(toE, ''), prep(after, '')],
       act: () => { const c = prep(toE, `${ex.name}で降りる`); c.icLeg = true; setActive(c); preferGeneral = true; }
     });
     if (rej) {
@@ -214,15 +216,20 @@ async function generalCands(my, withEntry) {
   return cands;
 }
 function decide(cands, auto, note, curEntry) {
-  const thr = Number($('thr').value), w = wkm();
-  const curDur = remDur(active), curDist = remDist(active);
-  cands.forEach(c => { c.tGain = (curDur - c.dur) / 60; c.dKm = (c.dist - curDist) / 1000; c.sGain = c.tGain - w * c.dKm; });
+  const thr = Number($('thr').value), w = wkm(), bw = bdw();
+  const curDur = remDur(active), curDist = remDist(active), curB = bdNow(active);
+  cands.forEach(c => {
+    c.bd = c.bdParts ? bdSum(c.bdParts.map(p => burden(p, 0))) : c.pc ? bdNow(c.pc) : null;
+    c.bDiff = c.bd ? c.bd.min - curB.min : 0; // 負担の増えた分（分）
+    c.tGain = (curDur - c.dur) / 60; c.dKm = (c.dist - curDist) / 1000; c.sGain = c.tGain - w * c.dKm - bw * c.bDiff;
+  });
   cands.sort((a, b) => b.sGain - a.sGain);
   const best = cands[0];
   let verdict, say, recommend = false;
   if (best && best.sGain >= thr) {
     recommend = true;
-    verdict = `判定：${best.label}が有利。このままより約${Math.round(best.tGain)}分早く、距離${fmtKm(best.dKm)}（実質${Math.round(best.sGain)}分有利）`;
+    verdict = `判定：${best.label}が有利。このままより約${Math.round(best.tGain)}分早く、距離${fmtKm(best.dKm)}（実質${Math.round(best.sGain)}分有利）`
+      + (best.bDiff >= 2 ? '。ただし負担は大きめです' : best.bDiff <= -2 ? '。負担も軽くなります' : '');
     say = `${best.label.replace(/（.*?）/g, '')}${best.entry ? '案' : ''}が有利です。約${Math.round(best.tGain)}分早く着きます`;
     setData('prop', [{type:'Feature', properties:{}, geometry:{type:'LineString', coordinates: best.geom}}]);
   } else {
@@ -232,13 +239,15 @@ function decide(cands, auto, note, curEntry) {
   }
   let h = `<div id="verdict">${verdict}</div>
     <div class="small">${note}<button class="q" data-q="judge">？</button></div>
-    <div class="card cur"><b>このまま</b>（${active.name}${curEntry ? '・' + curEntry + 'から乗る' : ''}）<br>到着 ${hhmm(curDur)}　残り${(curDist / 1000).toFixed(1)}km</div>`;
+    <div class="card cur"><b>このまま</b>（${active.name}${curEntry ? '・' + curEntry + 'から乗る' : ''}）<br>到着 ${hhmm(curDur)}　残り${(curDist / 1000).toFixed(1)}km<br><span class="small">${bdText(curB)}</span></div>`;
   cands.forEach((c, i) => {
     const g = Math.round(c.sGain);
     h += `<div class="card"><b>${c.label}</b><br>
       到着 ${hhmm(c.dur)}（${sgn(-Math.round(c.tGain))}分、距離${fmtKm(c.dKm)}）<br>
-      実質 ${g >= 0 ? g + '分有利' : -g + '分不利'}　<button data-c="${i}">この案で行く</button></div>`;
+      実質 ${g >= 0 ? g + '分有利' : -g + '分不利'}　<button data-c="${i}">この案で行く</button>`
+      + (c.bd ? `<br><span class="small">${bdText(c.bd)}${bw && Math.abs(c.bDiff) >= 0.5 ? '　負担の差 ' + sgn(Math.round(c.bDiff * bw)) + '分' : ''}</span>` : '') + '</div>';
   });
+  h += bdNote(active);
   if (!cands.length) h += '<div class="small">比べられる候補が見つかりませんでした</div>';
   $('judgeOut').innerHTML = h;
   $('judgeOut').querySelectorAll('button[data-c]').forEach(b => b.onclick = () => {
@@ -248,4 +257,3 @@ function decide(cands, auto, note, curEntry) {
   if (!auto || recommend) speak(say);
 }
 $('judgeBtn').onclick = () => judge(false, true);
-
