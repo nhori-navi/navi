@@ -1,0 +1,33 @@
+{
+  "id": "/navi/",
+  "name": "KomuMiru",
+  "short_name": "KomuMiru",
+  "description": "渋滞を見ながら、高速のまま・降りる・別の入口から乗るを比べる自分用カーナビ",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1f3a93",
+  "theme_color": "#1f3a93",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

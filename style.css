@@ -1,0 +1,45 @@
+/* KomuMiru の見た目 */
+*{box-sizing:border-box}
+body{margin:0;font-family:sans-serif;font-size:15px;background:#fafafa}
+#map{position:absolute;top:0;left:0;right:0;height:55%}
+#panel{position:absolute;top:55%;bottom:0;left:0;right:0;overflow:auto;padding:8px 10px;background:#fafafa;border-top:1px solid #ccc}
+@media (min-width:900px){
+  #map{height:auto;bottom:0;right:400px}
+  #panel{top:0;left:auto;width:400px;border-top:none;border-left:1px solid #ccc}
+}
+button,select,input{font-size:15px;padding:6px 10px;margin:3px 3px 3px 0}
+#search{width:55%}
+#next{font-size:21px;font-weight:bold;margin:2px 0}
+#summary{font-size:16px;margin:2px 0}
+#exitInfo{font-size:15px;color:#1f3a93;font-weight:bold;margin:2px 0 4px}
+#hwy{display:none;background:#fff;border:2px solid #2e7d32;border-radius:8px;padding:4px 8px;margin:6px 0}
+.fac{display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid #eee;font-size:15px}
+.fac:last-child{border-bottom:none}
+.fac .t{flex:none;min-width:34px;text-align:center;border-radius:4px;color:#fff;font-size:12px;font-weight:bold;padding:1px 3px}
+.fac .n{flex:1;font-weight:bold}
+.fac .d{flex:none;text-align:right;white-space:nowrap}
+.jam{color:#c0392b;font-size:12px;padding:0 0 2px 40px}
+/* 名前と使い方ナビ */
+#top{display:flex;align-items:center;gap:6px;margin:0 0 4px}
+#appName{font-weight:bold;font-size:18px;color:#1f3a93;letter-spacing:.5px}
+.helpSw{margin-left:auto;display:inline-flex;align-items:center;gap:5px;border:1px solid #1f3a93;border-radius:16px;padding:4px 12px;font-size:14px;color:#1f3a93;background:#fff;cursor:pointer;user-select:none}
+.helpSw input{margin:0;width:18px;height:18px;padding:0}
+body.help .helpSw{background:#1f3a93;color:#fff}
+#tip{display:none;position:sticky;top:0;z-index:5;background:#fffbe6;border:2px solid #f0b400;border-radius:8px;padding:8px 34px 8px 10px;margin:4px 0 6px;font-size:15px;line-height:1.6;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+#tipWarn{color:#b03a2e;font-size:13px;margin-top:4px}
+#tipWarn:empty{display:none}
+#tip .x{position:absolute;top:2px;right:2px;border:none;background:none;font-size:22px;line-height:1;padding:4px 8px;margin:0;color:#8a6d00}
+.hl{outline:3px solid #f0b400;outline-offset:2px;border-radius:6px;animation:hlp 1.2s ease-in-out infinite}
+#map.hl{outline-offset:-4px;border-radius:0}
+@keyframes hlp{50%{outline-color:rgba(240,180,0,.2)}}
+.q{display:none;border:1px solid #f0b400;background:#fffbe6;color:#8a6d00;border-radius:50%;width:26px;height:26px;padding:0;margin:0 0 0 4px;font-size:13px;font-weight:bold;line-height:24px;text-align:center;vertical-align:middle}
+body.help .q{display:inline-block}
+#banner{display:none;background:#fff3cd;border:2px solid #e0a800;border-radius:8px;padding:8px;margin:6px 0;font-size:16px}
+#verdict{background:#e8f0fe;border:2px solid #1f3a93;border-radius:8px;padding:8px;margin:6px 0;font-size:16px;font-weight:bold}
+#judgeBtn{background:#1f3a93;color:#fff;border:none;border-radius:6px}
+.card{border:1px solid #ccc;border-radius:6px;padding:6px 8px;margin:6px 0;background:#fff;line-height:1.6}
+.cur{border:2px solid #1f3a93}
+.inc{color:#8e44ad}
+.small{color:#777;font-size:12px}
+.hit{padding:8px;border-bottom:1px solid #ddd;cursor:pointer;background:#fff}
+details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px}
