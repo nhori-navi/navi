@@ -95,7 +95,116 @@ function sameAs(c, base) {
   return hit / n >= 0.85;
 }
 // 実質の得（分）：時間の短縮 − 遠回り距離×設定値
-function scoreGain(c) { return (remDur(active) - remDur(c)) / 60 - wkm() * (remDist(c) - remDist(active)) / 1000; }
+// 実質の得（分）：時間の短縮 − 遠回り距離×設定値 − 心的負担の増えた分×重み
+function scoreGain(c) {
+  return (remDur(active) - remDur(c)) / 60 - wkm() * (remDist(c) - remDist(active)) / 1000 - bdw() * (bdNow(c).min - bdNow(active).min);
+}
+
+// ---------- 心的負担 ----------
+// 換算：重み「中」のとき、1つ（細い道は1km）あたり何分の損とみなすか
+const BD_MIN = {right: 0.5, uturn: 0.5, left: 0.2, signal: 0.1, rail: 1, curve: 0.3, narrowKm: 2};
+const NARROW = ['street', 'street_limited', 'service', 'track']; // 細い道とみなす道路の種類（Mapbox の分類）
+const bdw = () => { const e = $('bdw'); return e ? Number(e.value) : 1; };
+// 道のりの位置 a の地点
+function pointAt(c, a) {
+  const T = totalOf(c); if (a <= 0) return c.coords[0]; if (a >= T) return c.coords[c.coords.length - 1];
+  let lo = 0, hi = c.cum.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (c.cum[m] <= a) lo = m; else hi = m; }
+  const s = c.cum[hi] - c.cum[lo], t = s ? (a - c.cum[lo]) / s : 0, p = c.coords[lo], q = c.coords[hi];
+  return [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+}
+// 地点 p の道のりの位置（前から順に探すので、i から先だけを見る）
+function alongFrom(c, p, i) {
+  let best = {d: 1e12, i, t: 0};
+  for (let k = i; k < c.coords.length - 1 && k < i + 600; k++) {
+    const s = segDist(p, c.coords[k], c.coords[k + 1]);
+    if (s.d < best.d) best = {d: s.d, i: k, t: s.t};
+    if (best.d < 3 && s.d > 200) break;
+  }
+  if (best.d > 100) { const n = nearest(c.coords, p); best = {d: n.d, i: n.i, t: n.t}; }
+  const a = c.cum[best.i], b = c.cum[best.i + 1];
+  return {a: b === undefined ? a : a + best.t * (b - a), i: best.i};
+}
+// ルートごとに一度だけ、右左折・信号・踏切・細い道・急カーブの位置を調べて覚えておく
+function bdData(c) {
+  if (c._bd) return c._bd;
+  const steps = [].concat(...c.r.legs.map(l => l.steps || []));
+  const man = [], manA = [], sig = [], rail = [], road = [];
+  let i = 0;
+  steps.forEach(st => {
+    const t = st.maneuver.type, m = st.maneuver.modifier || '';
+    const pm = alongFrom(c, st.maneuver.location, i); i = pm.i; manA.push(pm.a);
+    if (!['depart', 'arrive', 'merge', 'notification', 'roundabout', 'rotary', 'exit roundabout', 'exit rotary'].includes(t)) {
+      const k = m === 'uturn' ? 'uturn' : (m === 'right' || m === 'sharp right') ? 'right' : (m === 'left' || m === 'sharp left') ? 'left' : null;
+      if (k) man.push({a: pm.a, k});
+    }
+    (st.intersections || []).forEach(x => {
+      let a;
+      if (x.geometry_index !== undefined && c.cum[x.geometry_index] !== undefined) a = c.cum[x.geometry_index];
+      else { const q = alongFrom(c, x.location, i); a = q.a; i = q.i; }
+      if (x.traffic_signal) sig.push(a);
+      if (x.railway_crossing) rail.push(a);
+      if (x.mapbox_streets_v8 && x.mapbox_streets_v8.class) road.push({a, cls: x.mapbox_streets_v8.class});
+    });
+  });
+  const T = totalOf(c), narrow = [];
+  road.sort((x, y) => x.a - y.a).forEach((x, k) => { if (NARROW.includes(x.cls)) narrow.push([x.a, k + 1 < road.length ? road[k + 1].a : T]); });
+  // 急カーブ：前後50mの向きが60度以上変わる所（曲がり角の案内がある所は除く）
+  const curves = []; let inC = false, start = 0;
+  for (let a = 50; a <= T - 50; a += 20) {
+    const p0 = pointAt(c, a - 50), p1 = pointAt(c, a), p2 = pointAt(c, a + 50);
+    let d = 0;
+    if (distM(p0, p1) > 30 && distM(p1, p2) > 30) { d = Math.abs(bearing(p1, p2) - bearing(p0, p1)); if (d > 180) d = 360 - d; }
+    if (d >= 60) { if (!inC) { inC = true; start = a; } }
+    else if (inC) { inC = false; curves.push(start); }
+  }
+  if (inC) curves.push(start);
+  c._bd = {man, sig, rail, narrow, curves: curves.filter(a => !manA.some(m => Math.abs(m - a) < 80)), hasRoad: road.length > 0};
+  return c._bd;
+}
+// 道のりの位置 from から先の負担
+function burden(c, from) {
+  const d = bdData(c), f = from || 0;
+  const b = {right: 0, uturn: 0, left: 0, signal: 0, rail: 0, curve: 0, narrowKm: 0};
+  d.man.forEach(x => { if (x.a >= f) b[x.k]++; });
+  d.sig.forEach(a => { if (a >= f) b.signal++; });
+  d.rail.forEach(a => { if (a >= f) b.rail++; });
+  d.curves.forEach(a => { if (a >= f) b.curve++; });
+  d.narrow.forEach(([a0, a1]) => { const s = Math.max(a0, f); if (a1 > s) b.narrowKm += (a1 - s) / 1000; });
+  return bdFinish(b, Math.max(0, totalOf(c) - f) / 1000);
+}
+// 合計の分数と、低・中・高の目安（10kmあたりの負担で決める。距離が短くても5kmとして数える）
+function bdFinish(b, km) {
+  b.km = km; b.min = 0;
+  for (const k in BD_MIN) b.min += BD_MIN[k] * b[k];
+  const per10 = b.min / Math.max(5, km) * 10;
+  b.level = per10 < 3 ? '低' : per10 < 7 ? '中' : '高';
+  return b;
+}
+// いくつかの区間（降りてから一般道、など）の負担を足し合わせる
+function bdSum(list) {
+  const b = {right: 0, uturn: 0, left: 0, signal: 0, rail: 0, curve: 0, narrowKm: 0}; let km = 0;
+  list.forEach(x => { for (const k in b) b[k] += x[k]; km += x.km; });
+  return bdFinish(b, km);
+}
+// 今いる位置から先の負担（ルートの上にいなければ最初から）
+const bdNow = c => burden(c, pos && nearest(c.coords, pos).d < 300 ? along(c, pos) : 0);
+function bdText(b) {
+  const p = [];
+  if (b.right) p.push('右折' + b.right);
+  if (b.uturn) p.push('Uターン' + b.uturn);
+  if (b.left) p.push('左折' + b.left);
+  if (b.signal) p.push('信号' + b.signal);
+  if (b.rail) p.push('踏切' + b.rail);
+  if (b.curve) p.push('急カーブ' + b.curve);
+  if (b.narrowKm >= 0.1) p.push('細い道' + b.narrowKm.toFixed(1) + 'km');
+  return `負担 ${b.level}（${p.join('・') || 'ほぼなし'}）`;
+}
+// 信号・踏切・道路の種類のデータが来ていないときの注意書き
+function bdNote(c) {
+  const d = bdData(c);
+  return (!d.sig.length && !d.rail.length && !d.hasRoad) ? '<div class="small">※信号・踏切・道路の種類のデータがないため、負担は右左折と急カーブだけで数えています</div>' : '';
+}
 // 高速道路かどうか
 const isMwStep = s => (s.intersections || []).some(x => (x.classes || []).includes('motorway'));
 function curStepIdx(my) {
