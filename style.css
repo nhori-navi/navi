@@ -43,3 +43,82 @@ body.help .q{display:inline-block}
 .small{color:#777;font-size:12px}
 .hit{padding:8px;border-bottom:1px solid #ddd;cursor:pointer;background:#fff}
 details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px}
+
+/* ===== 版5 ===== */
+.primary{background:#1f3a93;color:#fff;border:none;border-radius:6px}
+#verWarn{display:none;color:#fff;background:#c0392b;border-radius:6px;padding:6px 8px;font-size:13px;margin:4px 0}
+#resume{display:none;background:#fff3cd;border:2px solid #e0a800;border-radius:8px;padding:8px;margin:4px 0 6px;font-size:15px}
+#resume button{min-height:40px;min-width:90px}
+/* 走行中の大きな案内（ナビ中だけ出す） */
+#drive{display:none;align-items:center;gap:10px;background:#1f3a93;color:#fff;border-radius:10px;padding:6px 12px;margin:2px 0 6px}
+#drive.near{background:#c0392b}
+#dArrow{flex:none;width:56px;height:56px;display:flex;align-items:center;justify-content:center}
+#dArrow svg{width:56px;height:56px}
+#dArrow .flag{font-size:42px;line-height:1}
+#dMain{min-width:0}
+#dDist{font-size:30px;font-weight:bold;line-height:1.1}
+#dText{font-size:17px;line-height:1.3;overflow-wrap:anywhere}
+#stop.arm{background:#c0392b;color:#fff;border:1px solid #c0392b}
+#moreBtn{display:none}
+/* ナビ中：地図を広く（上70%）、パネルは案内・判定・停止だけ。ほかは「▲ 詳しく」で出す */
+body.driving #map{height:70%}
+body.driving #panel{top:70%}
+body.driving #drive{display:flex}
+body.driving #next{display:none}
+body.driving #moreBtn{display:inline-block}
+body.driving #btnRow{display:flex;gap:6px;align-items:center}
+body.driving #btnRow button:not(.q){flex:1;min-height:52px;font-size:17px;margin:2px 0;border-radius:8px}
+body.driving #start{display:none !important}
+body.driving:not(.more) #searchRow, body.driving:not(.more) #hits, body.driving:not(.more) #guide,
+body.driving:not(.more) #cands, body.driving:not(.more) #settings, body.driving:not(.more) details,
+body.driving:not(.more) #credit, body.driving:not(.more) #verBox{display:none}
+body:not(.driving) #stop{display:none}
+/* 地図の右の丸ボタン（◎追従・向き） */
+#mapBtns{position:absolute;right:10px;bottom:40px;z-index:3;display:flex;flex-direction:column;gap:10px}
+.mb{width:48px;height:48px;border-radius:50%;border:none;background:#fff;color:#1f3a93;font-size:15px;font-weight:bold;box-shadow:0 1px 5px rgba(0,0,0,.35);margin:0;padding:0}
+.mb.on{background:#1f3a93;color:#fff}
+#mFollow{font-size:22px}
+/* パソコンの広い画面：地図は左いっぱい、パネルは右 */
+@media (min-width:900px){
+  body.driving #map{height:auto}
+  body.driving #panel{top:0}
+}
+/* スマホの横向き（高さ520px以下）：地図を左、パネルを右。ナビ中は地図いっぱい＋右下の小さな箱 */
+@media (orientation:landscape) and (max-height:520px){
+  #map{top:0;bottom:0;height:auto !important;right:calc(340px + env(safe-area-inset-right))}
+  #panel{top:0 !important;bottom:0;left:auto;right:0;width:calc(340px + env(safe-area-inset-right));padding-right:calc(10px + env(safe-area-inset-right));border-top:none;border-left:1px solid #ccc}
+  body.driving #map{right:0}
+  body.driving #panel{top:auto !important;bottom:calc(8px + env(safe-area-inset-bottom));right:calc(8px + env(safe-area-inset-right));width:340px;padding-right:10px;max-height:62%;border:1px solid #ccc;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+  body.driving.more #panel{max-height:calc(100% - 16px)}
+  body.driving:not(.more) #top{display:none}
+  body.driving #mapBtns{right:auto;left:calc(10px + env(safe-area-inset-left))}
+  #dArrow, #dArrow svg{width:48px;height:48px}
+  #dDist{font-size:26px}
+}
+/* 夜間モード（body.dark） */
+body.dark{background:#121821;color:#e6e9ef}
+body.dark #panel{background:#161d28;border-color:#2c3646}
+body.dark button, body.dark select, body.dark input, body.dark textarea{background:#253045;color:#e6e9ef;border:1px solid #3a4760;border-radius:4px}
+body.dark button:disabled{color:#6b7488}
+body.dark #judgeBtn, body.dark .primary{background:#3157c9;border-color:#3157c9;color:#fff}
+body.dark #stop.arm{background:#c0392b;border-color:#c0392b;color:#fff}
+body.dark .card, body.dark details, body.dark #hwy, body.dark .hit{background:#1e2633;border-color:#33405a;color:#e6e9ef}
+body.dark #hwy{border-color:#3f8f47}
+body.dark .cur{border-color:#6f8fe6}
+body.dark #verdict{background:#1b2a4a;border-color:#6f8fe6;color:#e6e9ef}
+body.dark #banner, body.dark #resume, body.dark #tip{background:#3b3010;border-color:#c9a227;color:#fff1c2}
+body.dark #tip .x{color:#f0d77a}
+body.dark .small{color:#9aa4b5}
+body.dark #exitInfo, body.dark #appName{color:#8fb0ff}
+body.dark .inc{color:#d2a8e6}
+body.dark .jam{color:#ff8a7a}
+body.dark .fac{border-color:#2c3646}
+body.dark .helpSw{background:#253045;color:#8fb0ff;border-color:#8fb0ff}
+body.dark.help .helpSw{background:#3157c9;color:#fff}
+body.dark .q{background:#3b3010;color:#f0d77a;border-color:#c9a227}
+body.dark .mb{background:#253045;color:#cfd8ea;border:none;border-radius:50%}
+body.dark .mb.on{background:#3157c9;color:#fff}
+body.dark #drive{background:#22346e}
+body.dark #drive.near{background:#c0392b}
+body.dark #err{color:#ff8a7a !important}
+@media (orientation:landscape) and (max-height:520px){ body.dark.driving #panel{border-color:#2c3646} }

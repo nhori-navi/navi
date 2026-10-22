@@ -1,4 +1,5 @@
 // KomuMiru：目的地・出口の登録・現在地・走行中の案内・開始と停止
+(window.KOMU_FV = window.KOMU_FV || {}).nav = 5;
 
 // ---------- 目的地 ----------
 $('pickBtn').onclick = () => { pickMode = true; icPick = false; $('guide').textContent = '地図上の目的地をタップしてください。'; };
@@ -32,15 +33,15 @@ $('searchBtn').onclick = async () => {
       const sm = document.createElement('div'); sm.className = 'small';
       sm.textContent = f.sub && f.sub !== f.name ? f.sub : '';
       d.append(b, sm);
-      d.onclick = () => { setDest(f.p); $('hits').innerHTML = ''; };
+      d.onclick = () => { setDest(f.p, f.name); $('hits').innerHTML = ''; };
       $('hits').appendChild(d);
     });
     if (!feats.length) $('hits').textContent = '見つかりませんでした。住所で試すか「地図で指定」を使ってください。';
   } catch (e) { $('hits').innerHTML = ''; showErr('検索エラー：' + e.message); }
 };
 $('search').addEventListener('keydown', e => { if (e.key === 'Enter') $('searchBtn').click(); });
-function setDest(p) {
-  dest = p; preferGeneral = false; viaEntry = null;
+function setDest(p, name) {
+  dest = p; preferGeneral = false; viaEntry = null; destName = name || '地図で指定した場所';
   if (destMarker) destMarker.remove();
   destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
   $('guide').textContent = '目的地を設定しました。「ナビ開始」を押してください。';
@@ -77,7 +78,7 @@ $('icImport').onclick = () => {
 
 // ---------- 現在地 ----------
 function onPos(p) {
-  pos = [p.coords.longitude, p.coords.latitude]; speed = p.coords.speed;
+  pos = [p.coords.longitude, p.coords.latitude]; speed = p.coords.speed; gpsHead = p.coords.heading;
   if (!posMarker) {
     const el = document.createElement('div');
     el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:#1e90ff;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5)';
@@ -86,7 +87,7 @@ function onPos(p) {
     prefetchEntries(15000); // 近くの入口のデータを裏で取っておく
     if (!dest) $('guide').textContent = '目的地を検索するか、「地図で指定」を押して地図をタップしてください。';
   } else posMarker.setLngLat(pos);
-  if (navOn && follow) map.easeTo({center: pos, duration: 800});
+  if (navOn && follow) followCam();
   if (navOn && active) guide();
 }
 
@@ -100,7 +101,7 @@ function guide() {
   if (active.icLeg && rem < 150) { active = null; speak('一般道のルートで案内を続けます'); compare(); return; }
   if (rem < 40) { speak('目的地に到着しました'); stopNav(); $('next').textContent = '到着しました'; return; }
   const rd = remDur(active);
-  $('summary').textContent = `到着 ${hhmm(rd)}　残り ${Math.round(rd / 60)}分・${fmtDist(rem)}`;
+  $('summary').textContent = `到着 ${hhmm(rd)}　残り ${Math.round(rd / 60)}分・${fmtDist(rem)}` + (destName ? `　→ ${destName}` : '');
 
   const exits = exitsAhead(my);
   $('exitInfo').textContent = exits.length ? `次の出口：${exits[0].ic.name}　あと${fmtDist(exits[0].a)}` : '';
@@ -115,10 +116,11 @@ function guide() {
   renderHighway(my, st0 ? isMwStep(st0) : false);
 
   const k = curStepIdx(my) + 1;
-  if (k >= active.steps.length || !(active.manAlong[k] > my + 5)) $('next').textContent = '目的地まで道なりです';
+  if (k >= active.steps.length || !(active.manAlong[k] > my + 5)) { $('next').textContent = '目的地まで道なりです'; drawDrive(null, null, '目的地まで道なり'); }
   else {
     const st = active.steps[k], dist = active.manAlong[k] - my, ins = st.maneuver.instruction || '';
     $('next').textContent = `${fmtDist(dist)}先　${ins}`;
+    drawDrive(st.maneuver, dist, ins);
     const key = st.maneuver.location.map(v => v.toFixed(4)).join(',');
     const far = (speed && speed > 20) ? 1000 : 300;
     if (dist <= far && dist > 120 && !spoken.has(key + 'f')) { spoken.add(key + 'f'); speak(`${fmtDist(dist)}先、${ins}`); }
@@ -144,24 +146,25 @@ function guide() {
 // ---------- 開始・停止 ----------
 function restartTimer() { clearInterval(timer); timer = setInterval(compare, Number($('interval').value) * 60000); }
 $('interval').onchange = () => { if (navOn) restartTimer(); };
-$('start').onclick = async () => {
+// ナビを始める。opts（再開のとき）：{viaEntry：選んでいた入口, preferGeneral：一般道を選んでいたか}
+async function startNav(opts) {
   if (!pos) { showErr('現在地がまだ取得できていません。少し待ってから押してください。'); return; }
   if (!dest) return;
-  navOn = true; follow = true; preferGeneral = false; viaEntry = null; entryPending = true; entryRetry = 0; clearTimeout(entryRetryTimer); $('followBtn').textContent = '追従：ON';
+  opts = opts || {};
+  navOn = true; preferGeneral = !!opts.preferGeneral; viaEntry = opts.viaEntry || null;
+  entryPending = !viaEntry; entryRetry = 0; clearTimeout(entryRetryTimer);
   $('start').disabled = true; $('stop').disabled = false; $('judgeOut').innerHTML = '';
-  speak('ナビを開始します'); keepAwake();
-  map.easeTo({center: pos, zoom: 15});
-  active = null; await compare(); restartTimer();
+  setDriving(true); setFollow(true);
+  speak(opts.viaEntry !== undefined ? 'ナビを再開します' : 'ナビを開始します'); keepAwake();
+  followCam({zoom: 15});
+  active = null; await compare(); restartTimer(); saveSession();
   if (active && !judging) judge(true);
-};
+}
+$('start').onclick = () => startNav();
 function stopNav() {
   navOn = false; clearInterval(timer); clearTimeout(entryRetryTimer); viaEntry = null; entryPending = false;
   try { if (wakeLock) wakeLock.release(); } catch (e) {}
   hideBanner(); $('start').disabled = !dest; $('stop').disabled = true; $('hwy').style.display = 'none';
   $('exitInfo').textContent = ''; $('status').textContent = '停止中';
+  clearSession(); setDriving(false); camReset();
 }
-$('stop').onclick = () => { stopNav(); speak('ナビを終了します'); };
-$('followBtn').onclick = () => {
-  follow = !follow; $('followBtn').textContent = follow ? '追従：ON' : '追従：OFF';
-  if (follow && pos) map.easeTo({center: pos});
-};

@@ -1,11 +1,13 @@
 // KomuMiru：地図の準備・位置情報の開始・アプリ化（最後に読み込む）
+(window.KOMU_FV = window.KOMU_FV || {}).main = 5;
 // ほかのファイルの関数をすべて読み込んでから、地図と位置情報を動かし始める
 
 // ---------- 地図の準備 ----------
 mapboxgl.accessToken = TOKEN;
 map = new mapboxgl.Map({
   container: 'map', style: 'mapbox://styles/mapbox/standard',
-  center: [139.33, 35.62], zoom: 11, language: 'ja'
+  center: [139.33, 35.62], zoom: 11, language: 'ja',
+  config: {basemap: {lightPreset: themeState().preset}} // 夜は最初から夜の地図
 });
 map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 map.on('load', () => {
@@ -32,7 +34,7 @@ map.on('load', () => {
   renderIcs();
 });
 map.on('error', e => showErr('地図エラー：' + (e.error && e.error.message ? e.error.message : '不明')));
-map.on('dragstart', () => { if (navOn) { follow = false; $('followBtn').textContent = '追従：OFF'; } });
+map.on('dragstart', () => { if (navOn) setFollow(false); });
 map.on('click', e => {
   const p = [e.lngLat.lng, e.lngLat.lat];
   if (icPick) {
@@ -41,7 +43,7 @@ map.on('click', e => {
     if (name && name.trim()) { ics.push({name: name.trim(), p}); saveIcs(); $('guide').textContent = name.trim() + 'を登録しました。'; }
     return;
   }
-  if (pickMode) { pickMode = false; setDest(p); }
+  if (pickMode) { pickMode = false; setDest(p, '地図で指定した場所'); }
 });
 
 // ---------- 現在地 ----------
@@ -58,5 +60,6 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 window.addEventListener('offline', () => showErr('通信できません。地図・渋滞・経路は、通信が戻るまで更新されません'));
 window.addEventListener('online', () => showErr('通信が戻りました'));
 
-// ---------- 使い方ナビ ----------
+// ---------- 画面まわり（丸ボタン・夜間モード・再開・版の表示）と使い方ナビ ----------
+initUi();
 initHelp();

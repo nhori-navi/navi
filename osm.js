@@ -1,4 +1,5 @@
 // KomuMiru：OpenStreetMap から出口・入口・IC・JCT・SA・PA を取る／ハイウェイモード
+(window.KOMU_FV = window.KOMU_FV || {}).osm = 5;
 
 // ---------- OpenStreetMap（Overpass）の取得 ----------
 // ・頼む順番：本家 → private.coffee → VK → kumi。返事が遅いと6秒ごとに次の所にも頼み、最初の答えを使う

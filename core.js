@@ -1,4 +1,5 @@
 // KomuMiru：設定・共通の変数・計算の道具（最初に読み込む）
+(window.KOMU_FV = window.KOMU_FV || {}).core = 5;
 // ▼▼▼ ここにトークンを貼る（pk. で始まる文字列） ▼▼▼
 const TOKEN = 'pk.eyJ1IjoiaG9yaWhha28iLCJhIjoiY211djd0ejljMDA5ZjMycHYxaTY3M3BsdSJ9.a1yefJYynC4k_YvllM5DVw';
 // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
@@ -16,6 +17,7 @@ let reqCount = 0, pos = null, speed = null, dest = null, destMarker = null, posM
 let pickMode = false, icPick = false, navOn = false, follow = true, active = null, proposal = null;
 let offCount = 0, busy = false, judging = false, lastJudge = 0, timer = null, wakeLock = null;
 let preferGeneral = false;
+let gpsHead = null, destName = ''; // GPS の進む向き（度）／目的地の名前（再開の確認に出す）
 let viaEntry = null, entryPending = false; // 選んだ入口（IC）／ナビ開始後に入口の比較を行う印
 const spoken = new Set(), spokenInc = new Set(), spokenFac = new Set(), ignored = {};
 let ics = [];
@@ -31,7 +33,7 @@ function speak(t) {
 }
 function setData(id, f) { const s = map.getSource(id); if (s) s.setData({type:'FeatureCollection', features:f}); }
 function hhmm(sec) { return new Date(Date.now() + sec * 1000).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}); }
-function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.max(0, Math.round(m / 50) * 50) + 'm'; }
+function fmtDist(m) { return m >= 975 ? (m / 1000).toFixed(1) + 'km' : Math.max(0, Math.round(m / 50) * 50) + 'm'; }
 const fmtKm = v => (v >= 0 ? '+' : '') + v.toFixed(1) + 'km';
 const sgn = v => (v > 0 ? '+' : '') + v;
 const wkm = () => Number($('wkm').value);

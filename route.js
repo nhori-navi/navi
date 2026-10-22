@@ -1,4 +1,5 @@
 // KomuMiru：経路の取得・定期比較・判定
+(window.KOMU_FV = window.KOMU_FV || {}).route = 5;
 
 // ---------- 経路取得 ----------
 async function api(list, extra) {
