@@ -1,12 +1,14 @@
 // KomuMiru：地図の準備・位置情報の開始・アプリ化（最後に読み込む）
-(window.KOMU_FV = window.KOMU_FV || {}).main = 5.1;
+(window.KOMU_FV = window.KOMU_FV || {}).main = 7;
 // ほかのファイルの関数をすべて読み込んでから、地図と位置情報を動かし始める
 
 // ---------- 地図の準備 ----------
 mapboxgl.accessToken = TOKEN;
+const LAST_POS = (() => { try { const a = JSON.parse(localStorage.getItem('navi_lastpos')); return Array.isArray(a) && a.length === 2 ? a : null; } catch (e) { return null; } })();
 map = new mapboxgl.Map({
   container: 'map', style: 'mapbox://styles/mapbox/standard',
-  center: [139.33, 35.62], zoom: 11, language: 'ja',
+  // 前回の場所（精度100m以内で覚えた所）から始める。なければ日本全体
+  center: LAST_POS || [137.5, 37.0], zoom: LAST_POS ? 12 : 4.3, language: 'ja',
   config: {basemap: {lightPreset: themeState().preset}} // 夜は最初から夜の地図
 });
 map.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -44,14 +46,15 @@ map.on('click', e => {
     if (name && name.trim()) { ics.push({name: name.trim(), p}); saveIcs(); $('guide').textContent = name.trim() + 'を登録しました。'; }
     return;
   }
+  if (originPick) { originPick = false; setOrigin(p); return; }
   if (pickMode) { pickMode = false; setDest(p, '地図で指定した場所'); }
 });
 
 // ---------- 現在地 ----------
 if ('geolocation' in navigator) {
-  navigator.geolocation.watchPosition(onPos, e => showErr('位置情報エラー：' + e.message),
+  navigator.geolocation.watchPosition(onPos, onGeoErr,
     {enableHighAccuracy: true, maximumAge: 2000, timeout: 20000});
-} else showErr('この端末では位置情報が使えません');
+} else { geoErrMsg = 'この端末では位置情報が使えません'; showErr(geoErrMsg); }
 
 
 // ---------- アプリ化（ホーム画面に追加して全画面で開く） ----------

@@ -5,7 +5,7 @@
 // ・ナビの再開（30分以内に開き直したら続けるか聞く）
 // ・版の表示と古いファイルの知らせ
 // （版6）下のタブと真ん中の丸い▶、境目のつまみ、押して選ぶ並び、ホーム画面に追加
-(window.KOMU_FV = window.KOMU_FV || {}).ui = 6;
+(window.KOMU_FV = window.KOMU_FV || {}).ui = 7;
 
 function lsGetStr(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
 function lsSetStr(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -167,7 +167,7 @@ function initTheme() {
 const SESSION_KEY = 'navi_session', SESSION_MIN = 30;
 function saveSession() {
   if (!navOn || !dest) return;
-  lsSetStr(SESSION_KEY, JSON.stringify({t: Date.now(), dest, destName, viaEntry, preferGeneral}));
+  lsSetStr(SESSION_KEY, JSON.stringify({t: Date.now(), dest, destName, viaEntry, preferGeneral, vias}));
 }
 function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
 function initResume() {
@@ -183,8 +183,9 @@ function initResume() {
   $('resumeNo').onclick = () => { clearSession(); $('resume').style.display = 'none'; };
   $('resumeYes').onclick = () => {
     $('resume').style.display = 'none';
+    vias = Array.isArray(s.vias) ? s.vias.slice(0, 3) : []; drawVias();
     setDest(s.dest, s.destName || '', true);
-    const go = () => startNav({viaEntry: s.viaEntry || null, preferGeneral: !!s.preferGeneral});
+    const go = () => startNav({viaEntry: s.viaEntry || null, preferGeneral: !!s.preferGeneral, resume: true});
     if (pos) go();
     else {
       $('guide').textContent = '現在地が分かりしだい、ナビを再開します。';
@@ -310,8 +311,46 @@ function initApp() {
   };
 }
 
+// ---------- 地図の長押し（パソコンは右クリック）：目的地・経由地・出発地 ----------
+let pickPt = null;
+function openPick(p) {
+  pickPt = p;
+  $('pmDest').textContent = navOn ? 'ここを目的地にする（経由地はそのまま）' : 'ここを目的地にする';
+  const full = vias.length >= VIA_MAX;
+  $('pmVia').disabled = !dest || full;
+  $('pmVia').textContent = full ? '経由地は3か所までです' : !dest ? '経由地（先に目的地を決めてください）' : 'ここに寄ってから行く（経由地）';
+  $('pmOrigin').style.display = navOn ? 'none' : '';
+  $('pickModal').style.display = 'flex';
+}
+function closePick() { $('pickModal').style.display = 'none'; pickPt = null; }
+function initLongPress() {
+  const el = map.getContainer ? map.getContainer() : $('map');
+  let t = null, sx = 0, sy = 0;
+  const cancel = () => clearTimeout(t);
+  el.addEventListener('touchstart', e => {
+    cancel();
+    if (e.touches.length !== 1) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+    t = setTimeout(() => {
+      if (!map.unproject) return;
+      const r = el.getBoundingClientRect(), ll = map.unproject([sx - r.left, sy - r.top]);
+      openPick([ll.lng, ll.lat]);
+    }, 600);
+  }, {passive: true});
+  el.addEventListener('touchmove', e => { if (Math.hypot(e.touches[0].clientX - sx, e.touches[0].clientY - sy) > 10) cancel(); }, {passive: true});
+  el.addEventListener('touchend', cancel); el.addEventListener('touchcancel', cancel);
+  if (map.on) map.on('contextmenu', e => { if (e && e.lngLat) openPick([e.lngLat.lng, e.lngLat.lat]); });
+  $('pmDest').onclick = () => { const p = pickPt; closePick(); setDest(p, '地図で指定した場所'); };
+  $('pmVia').onclick = () => { const p = pickPt; closePick(); addVia(p, '地図で選んだ地点'); };
+  $('pmOrigin').onclick = () => { const p = pickPt; closePick(); setOrigin(p); };
+  $('pmCancel').onclick = closePick;
+  $('pickModal').onclick = e => { if (e.target === $('pickModal')) closePick(); };
+}
+
 function initUi() {
   initTabs();
+  initLongPress();
+  renderFavs(); renderOrigin(); updLoc();
   initGrip();
   initChips();
   initApp();
@@ -320,4 +359,5 @@ function initUi() {
   initResume();
   checkVersion();
   $('stop').onclick = stopPress;
+  readShareLink(); // 共有リンクから開いたとき
 }

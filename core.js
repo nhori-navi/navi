@@ -1,5 +1,5 @@
 // KomuMiru：設定・共通の変数・計算の道具（最初に読み込む）
-(window.KOMU_FV = window.KOMU_FV || {}).core = 5;
+(window.KOMU_FV = window.KOMU_FV || {}).core = 7;
 // ▼▼▼ ここにトークンを貼る（pk. で始まる文字列） ▼▼▼
 const TOKEN = 'pk.eyJ1IjoiaG9yaWhha28iLCJhIjoiY211djd0ejljMDA5ZjMycHYxaTY3M3BsdSJ9.a1yefJYynC4k_YvllM5DVw';
 // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
@@ -17,14 +17,23 @@ let reqCount = 0, pos = null, speed = null, dest = null, destMarker = null, posM
 let pickMode = false, icPick = false, navOn = false, follow = true, active = null, proposal = null;
 let offCount = 0, busy = false, judging = false, lastJudge = 0, timer = null, wakeLock = null;
 let preferGeneral = false;
-let gpsHead = null, destName = ''; // GPS の進む向き（度）／目的地の名前（再開の確認に出す）
+let gpsHead = null, destName = '';
+let vias = [], origin = null, posAcc = null; // 経由地 [{p, name}]（最大3）／下調べの出発地 {p, name}／現在地の精度（m） // GPS の進む向き（度）／目的地の名前（再開の確認に出す）
 let viaEntry = null, entryPending = false; // 選んだ入口（IC）／ナビ開始後に入口の比較を行う印
 const spoken = new Set(), spokenInc = new Set(), spokenFac = new Set(), ignored = {};
 let ics = [];
 try { ics = JSON.parse(localStorage.getItem('navi_ics') || '[]'); } catch (e) { ics = []; }
 
 // ---------- 共通 ----------
+// 英語のエラー文を日本語に（分からないものはそのまま）
+function jaErr(m) {
+  m = String(m || '');
+  return m.replace(/Failed to fetch|NetworkError[^）)]*|Load failed|network error/gi, '通信できません')
+    .replace(/The (user )?aborted a request\.?|signal is aborted[^）)]*|AbortError/gi, '時間切れ')
+    .replace(/QuotaExceededError[^）)]*/gi, '端末の保存場所がいっぱいです');
+}
 function showErr(m) {
+  m = jaErr(m);
   const t = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
   $('err').innerHTML = `<div>${t} ${m}</div>` + $('err').innerHTML.split('</div>').slice(0, 2).join('</div>');
 }
@@ -260,10 +269,13 @@ function exitsAhead(my) {
     .filter(x => x.off < 1500 && x.a > 100).sort((a, b) => a.a - b.a);
 }
 // この先の最初の渋滞区間（15km以内）
+// 次に向かう所（経由地があれば最初の経由地、なければ目的地）と、ルート上のその位置
+const nextStop = () => vias.length ? vias[0].p : dest;
+function stopAlong(c) { return vias.length ? along(c, vias[0].p) : totalOf(c); }
 function jamSpan(my) {
-  const c = active; let i1 = -1;
+  const c = active, lim = Math.min(my + 15000, stopAlong(c)); let i1 = -1; // 次の経由地より先は見ない
   for (let i = 0; i < c.coords.length - 1; i++) {
-    if (c.cum[i] < my) continue; if (c.cum[i] > my + 15000) break;
+    if (c.cum[i] < my) continue; if (c.cum[i] > lim) break;
     const g = c.cong[i]; if (g === 'heavy' || g === 'severe') { i1 = i; break; }
   }
   if (i1 < 0) return null;

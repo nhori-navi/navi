@@ -1,5 +1,5 @@
 // KomuMiru：OpenStreetMap から出口・入口・IC・JCT・SA・PA を取る／ハイウェイモード
-(window.KOMU_FV = window.KOMU_FV || {}).osm = 5;
+(window.KOMU_FV = window.KOMU_FV || {}).osm = 7;
 
 // ---------- OpenStreetMap（Overpass）の取得 ----------
 // ・頼む順番：本家 → private.coffee → VK → kumi。返事が遅いと6秒ごとに次の所にも頼み、最初の答えを使う
@@ -56,8 +56,8 @@ async function opPump() {
 
 // ---------- 出口の自動取得（OpenStreetMap）＋登録済み ----------
 async function findExits(my) {
-  const res = [];
-  exitsAhead(my).filter(x => x.a > 300 && x.a < 40000)
+  const res = [], lim = Math.min(40000, stopAlong(active) - my - 300); // 次の経由地より先の出口は比べない
+  exitsAhead(my).filter(x => x.a > 300 && x.a < lim)
     .forEach(x => res.push({name: x.ic.name, E: x.ic.p, a: x.a}));
   try {
     const pts = []; let next = my;
@@ -74,7 +74,7 @@ async function findExits(my) {
         .map(e => [e.lon, e.lat]).filter(p => nearest(active.coords, p).d > 40);
       els.filter(e => e.tags && e.tags.highway === 'motorway_junction').forEach(jn => {
         const p = [jn.lon, jn.lat], a = active.cum[nearest(active.coords, p).i] - my;
-        if (a < 300 || a > 40000) return;
+        if (a < 300 || a > lim) return;
         let best = null;
         booths.forEach(b => { const d = distM(p, b); if (d < 1500 && (!best || d < best.d)) best = {b, d}; });
         if (!best) return;
@@ -158,15 +158,16 @@ async function fetchTiles(need, pri) {
     }
   }
 }
-async function loadEntryTiles(R, pri) {
-  if (!pos) return {b: [], j: [], s: [], err: null, missing: 0};
-  const dLat = R / 110540, dLon = R / (111320 * Math.cos(pos[1] * Math.PI / 180));
-  const x0 = Math.floor((pos[0] - dLon) / ENT_T), x1 = Math.floor((pos[0] + dLon) / ENT_T);
-  const y0 = Math.floor((pos[1] - dLat) / ENT_T), y1 = Math.floor((pos[1] + dLat) / ENT_T);
+async function loadEntryTiles(R, pri, from) {
+  from = from || pos;
+  if (!from) return {b: [], j: [], s: [], err: null, missing: 0};
+  const dLat = R / 110540, dLon = R / (111320 * Math.cos(from[1] * Math.PI / 180));
+  const x0 = Math.floor((from[0] - dLon) / ENT_T), x1 = Math.floor((from[0] + dLon) / ENT_T);
+  const y0 = Math.floor((from[1] - dLat) / ENT_T), y1 = Math.floor((from[1] + dLat) / ENT_T);
   const keys = [];
   for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) keys.push(x + ',' + y);
   // 現在地に近いマスから順に取る
-  const ctr = k => { const [x, y] = k.split(',').map(Number); return distM(pos, [(x + 0.5) * ENT_T, (y + 0.5) * ENT_T]); };
+  const ctr = k => { const [x, y] = k.split(',').map(Number); return distM(from, [(x + 0.5) * ENT_T, (y + 0.5) * ENT_T]); };
   keys.sort((a, b) => ctr(a) - ctr(b));
   return loadTiles(keys, pri || 0);
 }
@@ -272,22 +273,24 @@ function renderHighway(my, onMw) {
 
 let entryFailed = false, entryRetry = 0, entryRetryTimer = null;
 const ENTRY_RETRY_MAX = 3;
-async function findEntries() {
-  const D = distM(pos, dest);
+// from：どこから乗るか（下調べの出発地。ふだんは現在地）。方向は次の経由地（なければ目的地）で見る
+async function findEntries(from) {
+  from = from || pos;
+  const to = nextStop(), D = distM(from, to);
   if (D < 10000) return [];
   // 目的地へ向かう方向にあるものだけ（大きく逆戻りする入口は除く）
-  const ok = p => distM(pos, p) + distM(p, dest) <= D * 1.25 + 2000;
+  const ok = p => distM(from, p) + distM(p, to) <= D * 1.25 + 2000;
   const groups = [];
   ics.forEach(ic => { if (ok(ic.p)) groups.push({name: ic.name, c: ic.p, pts: [ic.p]}); });
   const R = Math.round(Math.min(25000, Math.max(8000, D * 0.4)));
-  const tiles = await loadEntryTiles(R, 0);
+  const tiles = await loadEntryTiles(R, 0, from);
   entryFailed = !!(tiles.err && tiles.missing);
   if (entryFailed) showErr('入口（IC）の自動取得に失敗しました（' + tiles.err.message + '）。'
     + (entryRetry < ENTRY_RETRY_MAX ? '2分後にもう一度試します。それまでは' : '') + '登録済みの出口とMapboxの代替で比べます');
   const jns = tiles.j.filter(v => !isJct(v[2])).map(v => ({p: [v[0], v[1]], name: v[2]}));
   const osm = [];
   tiles.b.forEach(v => {
-    const p = [v[0], v[1]]; if (distM(pos, p) > R || !ok(p)) return;
+    const p = [v[0], v[1]]; if (distM(from, p) > R || !ok(p)) return;
     let g = osm.find(x => x.pts.some(q2 => distM(q2, p) < 600));
     if (!g) {
       let jn = null; jns.forEach(x => { const d = distM(x.p, p); if (d < 2500 && (!jn || d < jn.d)) jn = {name: x.name, d}; });
@@ -302,7 +305,7 @@ async function findEntries() {
     groups.push(g);
   });
   // 近くて、目的地への回り道が少ないものから最大5か所
-  const score = g => { const a = distM(pos, g.c); return a + 2 * (a + distM(g.c, dest) - D); };
+  const score = g => { const a = distM(from, g.c); return a + 2 * (a + distM(g.c, to) - D); };
   return groups.sort((x, y) => score(x) - score(y)).slice(0, 5);
 }
 const isJct = n => /JCT|ジャンクション/.test(n || '');
@@ -322,14 +325,15 @@ function mwStartAlong(c) {
     if ((x.classes || []).includes('motorway')) return along(c, x.location);
   return -1;
 }
-async function entryCands() {
-  const groups = await findEntries();
+async function entryCands(from) {
+  from = from || pos;
+  const groups = await findEntries(from);
   let calls = 0; const MAX_CALLS = 8;
   const res = await Promise.all(groups.map(async g => {
     for (const p of g.pts.slice(0, 2)) {
       if (calls >= MAX_CALLS) return null;
       calls++;
-      const r = await api([pos, p, dest], '&waypoints=0;2').then(x => x[0]).catch(() => null);
+      const r = await api([from, p, dest], '&waypoints=0;2').then(x => x[0]).catch(() => null);
       if (!r) continue;
       const c = prep(r, g.name + 'から乗る');
       const ap = along(c, p), am = mwStartAlong(c);

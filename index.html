@@ -16,11 +16,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 <script>
 // 版の決まり：KOMU_V＝アプリの版、KOMU_NEED＝ファイルごとに「そのファイルを最後に変えた版」
-window.KOMU_V = 6; window.KOMU_DATE = '2026-10-22';
-window.KOMU_NEED = {core: 5, osm: 5, route: 6, nav: 6, ui: 6, help: 6, main: 5.1};
+window.KOMU_V = 7; window.KOMU_DATE = '2026-10-22';
+window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 7, help: 7, main: 7};
 </script>
 </head>
 <body>
@@ -59,6 +59,17 @@ window.KOMU_NEED = {core: 5, osm: 5, route: 6, nav: 6, ui: 6, help: 6, main: 5.1
       </div>
       <div id="hits"></div>
       <div id="guide" class="small">現在地を取得中…</div>
+      <div class="small">地図を長押し（パソコンは右クリック）すると、目的地・経由地・出発地を決められます。</div>
+    </div>
+    <div class="card" id="favCard">
+      <div class="cardH">★ お気に入り<button class="q" data-q="fav">？</button></div>
+      <div id="favList"></div>
+    </div>
+    <div class="card">
+      <div class="cardH">出発地と現在地<button class="q" data-q="origin">？</button></div>
+      <div id="originText">出発地：現在地</div>
+      <button id="originPickBtn">出発地を地図で選ぶ（下調べ）</button><button id="originClear" style="display:none">現在地に戻す</button>
+      <div id="locLine" class="small">現在地：取得中…</div>
     </div>
   </div>
 
@@ -115,6 +126,16 @@ window.KOMU_NEED = {core: 5, osm: 5, route: 6, nav: 6, ui: 6, help: 6, main: 5.1
     </div>
   </div>
 </div>
+<!-- 地図の長押しの小さな画面 -->
+<div id="pickModal">
+  <div class="pmBox">
+    <div class="cardH">この場所を…</div>
+    <button id="pmDest" class="primary">ここを目的地にする</button>
+    <button id="pmVia">ここに寄ってから行く（経由地）</button>
+    <button id="pmOrigin">ここを出発地にする（下調べ）</button>
+    <button id="pmCancel">やめる</button>
+  </div>
+</div>
 <!-- 下のタブ -->
 <div id="tabbar">
   <button class="tb" data-tab="route"><span>🧭</span>ルート</button>
@@ -123,12 +144,12 @@ window.KOMU_NEED = {core: 5, osm: 5, route: 6, nav: 6, ui: 6, help: 6, main: 5.1
   <button class="tb" data-tab="ic"><span>🛣</span>IC</button>
   <button class="tb" data-tab="set"><span>⚙️</span>設定</button>
 </div>
-<script src="core.js?v=6"></script>
-<script src="osm.js?v=6"></script>
-<script src="route.js?v=6"></script>
-<script src="nav.js?v=6"></script>
-<script src="ui.js?v=6"></script>
-<script src="help.js?v=6"></script>
-<script src="main.js?v=6"></script>
+<script src="core.js?v=7"></script>
+<script src="osm.js?v=7"></script>
+<script src="route.js?v=7"></script>
+<script src="nav.js?v=7"></script>
+<script src="ui.js?v=7"></script>
+<script src="help.js?v=7"></script>
+<script src="main.js?v=7"></script>
 </body>
 </html>

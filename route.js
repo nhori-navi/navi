@@ -1,11 +1,25 @@
 // KomuMiru：経路の取得・定期比較・判定
-(window.KOMU_FV = window.KOMU_FV || {}).route = 6;
+(window.KOMU_FV = window.KOMU_FV || {}).route = 7;
 
 // ---------- 経路取得 ----------
+// list の最後が目的地なら、その前に残りの経由地を自動で入れる（経由地は「止まる所」、
+// &waypoints=0;2 で渡した途中の点は「通るだけの所」のまま）。経由地があるときは別ルートの案（alternatives）は頼まない
 async function api(list, extra) {
   if (reqCount >= MAX_REQ) throw new Error('利用回数の上限に達しました（再読み込みでリセット）');
+  extra = extra || '';
+  let pts = list.slice();
+  const m = /&waypoints=([\d;]+)/.exec(extra);
+  let real = m ? m[1].split(';').map(Number) : pts.map((_, i) => i);
+  if (m) extra = extra.replace(m[0], '');
+  if (vias.length && dest && list[list.length - 1] === dest) {
+    const n0 = list.length - 1, add = vias.map(v => v.p);
+    pts = pts.slice(0, n0).concat(add, [dest]);
+    real = real.filter(i => i !== n0).concat(add.map((_, k) => n0 + k), [n0 + add.length]);
+  }
+  if (real.length !== pts.length) extra += '&waypoints=' + real.join(';');
+  if (real.length > 2) extra = extra.replace('&alternatives=true', '');
   reqCount++; $('counter').textContent = `API利用 ${reqCount}回`;
-  const c = list.map(p => p[0].toFixed(6) + ',' + p[1].toFixed(6)).join(';');
+  const c = pts.map(p => p[0].toFixed(6) + ',' + p[1].toFixed(6)).join(';');
   const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${c}?geometries=geojson&overview=full&steps=true&language=ja&annotations=congestion,duration&access_token=${TOKEN}${extra}`;
   const res = await fetch(url), j = await res.json();
   if (!res.ok || j.code !== 'Ok') throw new Error(`経路取得失敗 HTTP ${res.status} ${j.code || ''} ${j.message || ''}`);
@@ -30,7 +44,7 @@ function prep(r, name) {
 }
 function setActive(c) {
   active = c;
-  active.steps = (c.r.legs[0] && c.r.legs[0].steps) || [];
+  active.steps = [].concat(...c.r.legs.map(l => l.steps || [])); // 経由地があると区間（leg）が分かれる
   active.manAlong = active.steps.map(s => along(c, s.maneuver.location));
   drawActive();
   prepFacilities(c);
@@ -61,9 +75,9 @@ async function compare() {
       const nm = active ? active.name : viaEntry.name + 'から乗る';
       curP = api([pos, viaEntry.p, dest], '&waypoints=0;2').then(rs => prep(rs[0], nm)).catch(e => { showErr(e.message); return null; });
     } else if (active) {
-      const n = nearest(active.coords, pos), here = active.cum[n.i], total = totalOf(active);
+      const n = nearest(active.coords, pos), here = active.cum[n.i], total = Math.min(totalOf(active), stopAlong(active));
       if (total - here > 2000) {
-        const target = here + (total - here) * 0.5; let j = n.i;
+        const target = here + (total - here) * 0.5; let j = n.i; // 通るだけの点は次の経由地より手前に置く
         while (j < active.coords.length - 1 && active.cum[j] < target) j++;
         const nm = active.name;
         curP = api([pos, active.coords[j], dest], '&waypoints=0;2').then(rs => prep(rs[0], nm)).catch(e => { showErr(e.message); return null; });

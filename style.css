@@ -168,3 +168,27 @@ body.help .qline{display:block}
 body.dark .tb{background:none;border:none;border-radius:0}
 body.dark #navFab{border:4px solid #161d28;border-radius:50%}
 .acts button{white-space:nowrap}
+/* ===== 版7：経由地・お気に入り・出発地・長押し・ICの比較 ===== */
+.viaList{margin:4px 0;font-size:14px}
+.viaTag{display:inline-flex;align-items:center;gap:2px;background:#eef2fb;border:1px solid #c5d0ea;border-radius:14px;padding:1px 2px 1px 8px;margin:2px 4px 2px 0}
+.viaTag .viaRm{border:none;background:none;min-height:0 !important;padding:2px 6px;margin:0;color:#c0392b;font-size:14px}
+.viaMk{width:26px;height:26px;border-radius:50%;background:#8e44ad;color:#fff;font-weight:bold;font-size:16px;line-height:26px;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.acts2 button{font-size:14px}
+.rough{background:#fff3cd;border:1px solid #e0a800;border-radius:8px;padding:6px 8px;margin:6px 0;font-size:14px}
+.favRow{display:flex;gap:6px;margin:4px 0}
+.favRow .favGo{flex:1;text-align:left;background:#fff;border:1px solid #c5d0ea;color:#1f3a93;font-weight:bold}
+.favRow .favDel{flex:none;font-size:13px}
+#originText{font-weight:bold;margin:2px 0}
+.icCmp{margin-top:8px;border-top:1px dashed #c5d0ea;padding-top:6px}
+.icRow{border:1px solid #ddd;border-radius:8px;padding:6px 8px;margin:6px 0;background:#fff;line-height:1.6}
+.icRow.same{border:2px solid #1f3a93}
+.icRow button{font-size:14px}
+#pickModal{display:none;position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.35);align-items:flex-end;justify-content:center}
+.pmBox{background:#fff;width:100%;max-width:420px;border-radius:14px 14px 0 0;padding:12px 14px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
+.pmBox button{min-height:48px;font-size:16px;border-radius:8px;margin:0}
+body.dark .viaTag{background:#1e2633;border-color:#3a4760}
+body.dark .rough{background:#3b3010;border-color:#c9a227;color:#fff1c2}
+body.dark .favRow .favGo{background:#1e2633;color:#8fb0ff;border-color:#3a4760}
+body.dark .icRow{background:#1e2633;border-color:#33405a}
+body.dark .icRow.same{border-color:#6f8fe6}
+body.dark .pmBox{background:#161d28;color:#e6e9ef}
