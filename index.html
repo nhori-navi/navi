@@ -16,16 +16,18 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 <script>
 // 版の決まり：KOMU_V＝アプリの版、KOMU_NEED＝ファイルごとに「そのファイルを最後に変えた版」
-window.KOMU_V = 5; window.KOMU_DATE = '2026-10-22';
-window.KOMU_NEED = {core: 5, osm: 5, route: 5, nav: 5, ui: 5, help: 5, main: 5};
+window.KOMU_V = 6; window.KOMU_DATE = '2026-10-22';
+window.KOMU_NEED = {core: 5, osm: 5, route: 6, nav: 6, ui: 6, help: 6, main: 5.1};
 </script>
 </head>
 <body>
 <div id="map"></div>
+<div id="grip" title="上下に動かして地図の広さを変える（2回タップで元に戻す）"><span></span></div>
 <div id="panel">
+  <!-- いつも出す部分（タブの上） -->
   <div id="top"><span id="appName">KomuMiru</span><button class="q" data-q="app">？</button><label class="helpSw"><input type="checkbox" id="helpChk">使い方ナビ</label></div>
   <div id="verWarn"></div>
   <div id="tip"><div id="tipText"></div><div id="tipWarn"></div><button class="x" id="tipX" aria-label="閉じる">×</button></div>
@@ -37,46 +39,96 @@ window.KOMU_NEED = {core: 5, osm: 5, route: 5, nav: 5, ui: 5, help: 5, main: 5};
   <div id="hwy"></div>
   <div id="banner">
     <div id="bannerText"></div>
-    <button id="switchBtn">切り替える</button><button id="ignoreBtn">今回は見送る</button>
+    <button id="switchBtn" class="primary">切り替える</button><button id="ignoreBtn">今回は見送る</button>
   </div>
   <div id="btnRow">
     <button id="start" disabled>ナビ開始</button><button id="judgeBtn">判定</button><button id="stop" disabled>停止</button><button id="moreBtn">▲ 詳しく</button><button class="q" data-q="buttons">？</button>
   </div>
-  <div id="searchRow">
-    <input id="search" placeholder="目的地（住所・駅名など）"><button id="searchBtn">検索</button><button id="pickBtn">地図で指定</button>
-  </div>
-  <div id="hits"></div>
-  <div id="guide" class="small">現在地を取得中…</div>
   <div id="judgeOut"></div>
   <div id="incs"></div>
-  <div id="cands"></div>
-  <div class="small" id="settings"><button class="q" data-q="settings">？</button>
-    提案する差：<select id="thr"><option>2</option><option selected>3</option><option>5</option><option>10</option></select>分以上
-    　確認間隔：<select id="interval"><option>1</option><option selected>2</option><option>3</option><option>5</option></select>分<br>
-    遠回り1km＝<select id="wkm"><option>0</option><option>0.5</option><option selected>1</option><option>2</option></select>分の損とみなす<br>
-    画面の明るさ：<select id="theme"><option value="auto">自動（夜は暗く）</option><option value="light">いつも明るい</option><option value="dark">いつも暗い</option></select><br>
-    心的負担の重み：<select id="bdw"><option value="0">なし</option><option value="0.5">弱</option><option value="1" selected>中</option><option value="2">強</option></select>
-  </div>
-  <details>
-    <summary>出口（IC）の登録<button class="q" data-q="ics">？</button></summary>
-    <div class="small">出口は地図データから自動で拾いますが、確実にしたい出口は登録できます。「出口を登録」を押し、<b>料金所を出た先の一般道</b>をタップして名前を付けてください。</div>
-    <button id="icAddBtn">出口を登録</button>
-    <div id="icList"></div>
-    <div class="small">端末間で移すとき：書き出し → 文字をコピー → 別の端末に貼って読み込み</div>
-    <textarea id="icText" rows="3" style="width:100%"></textarea>
-    <button id="icExport">書き出し</button><button id="icImport">読み込み</button>
-  </details>
-  <div class="small" id="statusRow"><span id="status"></span>　<span id="counter">API利用 0回</span><button class="q" data-q="status">？</button></div>
   <div id="err" class="small" style="color:#c00"></div>
-  <div class="small" id="credit">出口データ © OpenStreetMap contributors</div>
-  <div class="small" id="verBox"></div>
+
+  <!-- 🧭 ルート -->
+  <div class="pane" id="tab-route">
+    <div id="routeCard" class="card"></div>
+    <div class="small qline" style="text-align:right">結果のカードの見方<button class="q" data-q="route">？</button></div>
+    <div class="card">
+      <div class="cardH">目的地</div>
+      <div id="searchRow">
+        <input id="search" placeholder="駅名・施設名・住所"><button id="searchBtn" class="primary">検索</button><button id="pickBtn">地図で指定</button>
+      </div>
+      <div id="hits"></div>
+      <div id="guide" class="small">現在地を取得中…</div>
+    </div>
+  </div>
+
+  <!-- 📊 比較 -->
+  <div class="pane" id="tab-cmp">
+    <div class="card">
+      <div class="cardH">定期比較の候補<button class="q" data-q="cands">？</button></div>
+      <div class="small">ナビ中は確認間隔ごとに、今のルートとほかの候補を最新の渋滞で計算し直して、ここに並べます。もっと早い候補が「提案する差」以上あれば、上の黄色の枠と声で知らせます。</div>
+      <div id="cands"><div class="small">ナビを始めると、候補がここに出ます。</div></div>
+    </div>
+  </div>
+
+  <!-- 🛣 IC -->
+  <div class="pane" id="tab-ic">
+    <div class="card">
+      <div class="cardH">出口・入口（IC）<button class="q" data-q="ics">？</button></div>
+      <div class="small">出口・入口は地図データ（OpenStreetMap）から自動で探します。拾えないICや確実にしたいICは、ここで登録できます。「出口を登録」を押し、<b>料金所を出た先の一般道</b>をタップして名前を付けてください。登録したICは入口の候補にも使います。</div>
+      <button id="icAddBtn" class="primary">出口を登録</button>
+      <div id="icList"></div>
+    </div>
+    <div class="card">
+      <div class="cardH">ほかの端末へ移す</div>
+      <div class="small">書き出し → 文字をコピー → 別の端末に貼って読み込み</div>
+      <textarea id="icText" rows="3" style="width:100%"></textarea>
+      <button id="icExport">書き出し</button><button id="icImport">読み込み</button>
+    </div>
+  </div>
+
+  <!-- ⚙️ 設定 -->
+  <div class="pane" id="tab-set">
+    <div class="card" id="settings">
+      <div class="cardH">比べ方<button class="q" data-q="settings">？</button></div>
+      <div class="setRow"><div class="lbl">提案する差（何分以上早ければ知らせるか）</div>
+        <select id="thr" class="hid" data-unit="分"><option>2</option><option selected>3</option><option>5</option><option>10</option></select></div>
+      <div class="setRow"><div class="lbl">確認間隔（渋滞を確かめ直す間隔）</div>
+        <select id="interval" class="hid" data-unit="分"><option>1</option><option selected>2</option><option>3</option><option>5</option></select></div>
+      <div class="setRow"><div class="lbl">遠回り1kmを何分の損とみなすか</div>
+        <select id="wkm" class="hid" data-unit="分"><option>0</option><option>0.5</option><option selected>1</option><option>2</option></select></div>
+      <div class="setRow"><div class="lbl">心的負担の重み（右折・信号・踏切・急カーブ・細い道）</div>
+        <select id="bdw" class="hid"><option value="0">なし</option><option value="0.5">弱</option><option value="1" selected>中</option><option value="2">強</option></select></div>
+    </div>
+    <div class="card">
+      <div class="cardH">画面</div>
+      <div class="setRow"><div class="lbl">画面の明るさ</div>
+        <select id="theme" class="hid"><option value="auto">自動（夜は暗く）</option><option value="light">いつも明るい</option><option value="dark">いつも暗い</option></select></div>
+      <div class="setRow" id="appRow"><div class="lbl">ホーム画面のアプリ</div>
+        <div id="appState" class="small"></div><button id="appAdd" class="primary">📲 ホーム画面に追加</button><div id="appHow" class="small"></div></div>
+    </div>
+    <div class="card">
+      <div class="cardH">このアプリについて</div>
+      <div class="small" id="statusRow"><span id="status"></span>　<span id="counter">API利用 0回</span><button class="q" data-q="status">？</button></div>
+      <div class="small" id="credit">地図 © Mapbox / 出口・入口・SA・PAのデータ © OpenStreetMap contributors</div>
+      <div class="small" id="verBox"></div>
+    </div>
+  </div>
 </div>
-<script src="core.js?v=5"></script>
-<script src="osm.js?v=5"></script>
-<script src="route.js?v=5"></script>
-<script src="nav.js?v=5"></script>
-<script src="ui.js?v=5"></script>
-<script src="help.js?v=5"></script>
-<script src="main.js?v=5"></script>
+<!-- 下のタブ -->
+<div id="tabbar">
+  <button class="tb" data-tab="route"><span>🧭</span>ルート</button>
+  <button class="tb" data-tab="cmp"><span>📊</span>比較</button>
+  <button id="navFab" disabled><b>▶</b><small>ナビ開始</small></button>
+  <button class="tb" data-tab="ic"><span>🛣</span>IC</button>
+  <button class="tb" data-tab="set"><span>⚙️</span>設定</button>
+</div>
+<script src="core.js?v=6"></script>
+<script src="osm.js?v=6"></script>
+<script src="route.js?v=6"></script>
+<script src="nav.js?v=6"></script>
+<script src="ui.js?v=6"></script>
+<script src="help.js?v=6"></script>
+<script src="main.js?v=6"></script>
 </body>
 </html>

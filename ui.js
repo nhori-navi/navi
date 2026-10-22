@@ -4,7 +4,8 @@
 // ・地図の右の丸ボタン（◎追従、向き：北↑／進↑／3D）
 // ・ナビの再開（30分以内に開き直したら続けるか聞く）
 // ・版の表示と古いファイルの知らせ
-(window.KOMU_FV = window.KOMU_FV || {}).ui = 5;
+// （版6）下のタブと真ん中の丸い▶、境目のつまみ、押して選ぶ並び、ホーム画面に追加
+(window.KOMU_FV = window.KOMU_FV || {}).ui = 6;
 
 function lsGetStr(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
 function lsSetStr(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -132,9 +133,22 @@ function themeState() {
   return {dark: true, preset: 'night'};
 }
 let themePreset = null;
+// ルートの見え方：夜は縁取りを白っぽく太くし、まわりの道の渋滞の色を少し控えめにして、ルートを浮き立たせる
+// （自分で描いた線は emissive-strength で夜の照明に沈まないようにしてある：main.js）
+function routeStyle(dark) {
+  if (!map || typeof map.setPaintProperty !== 'function' || !map.getLayer) return;
+  const set = (id, k, v) => { try { if (map.getLayer(id)) map.setPaintProperty(id, k, v); } catch (e) {} };
+  set('casing', 'line-color', dark ? '#f2f5ff' : '#1f3a93');
+  set('casing', 'line-width', dark ? 13 : 11);
+  set('seg', 'line-width', dark ? 7 : 5);
+  set('traffic', 'line-opacity', dark ? 0.55 : 0.85);
+  set('icsLabel', 'text-color', dark ? '#ffb347' : '#b35900');
+  set('icsLabel', 'text-halo-color', dark ? '#1a1f2b' : '#fff');
+}
 function applyTheme() {
   const s = themeState();
   document.body.classList.toggle('dark', s.dark);
+  routeStyle(s.dark);
   const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = s.dark ? '#121821' : '#1f3a93';
   if (s.preset !== themePreset && map && typeof map.setConfigProperty === 'function') {
     try { map.setConfigProperty('basemap', 'lightPreset', s.preset); themePreset = s.preset; } catch (e) {}
@@ -169,7 +183,7 @@ function initResume() {
   $('resumeNo').onclick = () => { clearSession(); $('resume').style.display = 'none'; };
   $('resumeYes').onclick = () => {
     $('resume').style.display = 'none';
-    setDest(s.dest, s.destName || '');
+    setDest(s.dest, s.destName || '', true);
     const go = () => startNav({viaEntry: s.viaEntry || null, preferGeneral: !!s.preferGeneral});
     if (pos) go();
     else {
@@ -190,7 +204,117 @@ function checkVersion() {
   }
 }
 
+// ---------- 下のタブ ----------
+const TABS = ['route', 'cmp', 'ic', 'set'];
+let curTab = TABS.includes(lsGetStr('navi_tab', 'route')) ? lsGetStr('navi_tab', 'route') : 'route';
+function showTab(t, noSave) {
+  if (!TABS.includes(t)) t = 'route';
+  curTab = t;
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('open', p.id === 'tab-' + t));
+  document.querySelectorAll('.tb').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  if (!noSave) lsSetStr('navi_tab', t);
+  $('panel').scrollTop = 0;
+}
+// 使い方ナビ用：見えていないタブの中の部品なら、そのタブのボタンを返す
+function uiReach(el) {
+  if (!el) return el;
+  const pane = el.closest && el.closest('.pane');
+  if (!pane) return el;
+  const t = pane.id.replace('tab-', '');
+  if (document.body.classList.contains('driving') && !document.body.classList.contains('more')) return $('moreBtn');
+  return t === curTab ? el : document.querySelector(`.tb[data-tab="${t}"]`);
+}
+// 真ん中の丸いボタン：ナビ前は「▶ ナビ開始」、ナビ中（▲詳しくを開いたとき）は「▼ 戻る」
+function fabTick() {
+  const f = $('navFab');
+  if (navOn) { f.disabled = false; f.innerHTML = '<b>▼</b><small>戻る</small>'; }
+  else { f.disabled = !!$('start').disabled; f.innerHTML = '<b>▶</b><small>ナビ開始</small>'; }
+}
+function initTabs() {
+  document.querySelectorAll('.tb').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+  $('navFab').onclick = () => { if (navOn) $('moreBtn').click(); else startNav(); };
+  showTab(curTab, true);
+  fabTick(); setInterval(fabTick, 400);
+}
+
+// ---------- 境目のつまみ（縦向きのスマホだけ。ナビ前とナビ中で別々に覚える） ----------
+const SPLIT_DEF = {navi_split: 50, navi_split_drive: 70};
+function splitKey() { return navOn ? 'navi_split_drive' : 'navi_split'; }
+function applySplit() {
+  const r = document.documentElement.style;
+  r.setProperty('--split', Number(lsGetStr('navi_split', SPLIT_DEF.navi_split)) + '%');
+  r.setProperty('--splitD', Number(lsGetStr('navi_split_drive', SPLIT_DEF.navi_split_drive)) + '%');
+}
+function initGrip() {
+  applySplit();
+  const g = $('grip'); let drag = false, moved = false, lastUp = 0, rz = 0;
+  g.addEventListener('pointerdown', e => { drag = true; moved = false; g.classList.add('drag'); try { g.setPointerCapture(e.pointerId); } catch (x) {} e.preventDefault(); });
+  g.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const pct = Math.max(20, Math.min(80, e.clientY / window.innerHeight * 100));
+    document.documentElement.style.setProperty(navOn ? '--splitD' : '--split', pct.toFixed(1) + '%');
+    moved = true;
+    if (Date.now() - rz > 100) { rz = Date.now(); try { map && map.resize && map.resize(); } catch (x) {} }
+  });
+  const up = e => {
+    if (!drag) return; drag = false; g.classList.remove('drag');
+    const k = splitKey(), v = navOn ? '--splitD' : '--split';
+    if (moved) lsSetStr(k, parseFloat(getComputedStyle(document.documentElement).getPropertyValue(v)) || SPLIT_DEF[k]);
+    else if (Date.now() - lastUp < 400) { try { localStorage.removeItem(k); } catch (x) {} applySplit(); } // 2回タップで元に戻す
+    lastUp = moved ? 0 : Date.now();
+    resizeSoon();
+  };
+  g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+}
+
+// ---------- 押して選ぶ並び（設定のプルダウンを丸いボタンの並びに） ----------
+function initChips() {
+  document.querySelectorAll('select.hid').forEach(sel => {
+    const box = document.createElement('div'); box.className = 'chips'; box.dataset.for = sel.id;
+    const unit = sel.dataset.unit || '';
+    Array.from(sel.options).forEach(o => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.dataset.v = o.value;
+      b.textContent = o.textContent + unit;
+      b.onclick = () => { sel.value = o.value; sel.dispatchEvent(new Event('change')); syncChips(); };
+      box.appendChild(b);
+    });
+    sel.after(box);
+  });
+  syncChips(); setInterval(syncChips, 1000);
+}
+function syncChips() {
+  document.querySelectorAll('.chips').forEach(box => {
+    const v = $(box.dataset.for).value;
+    box.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  });
+}
+
+// ---------- ホーム画面に追加 ----------
+let installEv = null;
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; appRow(); });
+window.addEventListener('appinstalled', () => { installEv = null; showErr('ホーム画面に追加しました'); appRow(); });
+function appRow() {
+  if (isStandalone()) { $('appState').textContent = '📱 ホーム画面のアプリとして起動中'; $('appAdd').style.display = 'none'; $('appHow').textContent = ''; return; }
+  $('appState').textContent = 'ホーム画面に追加すると、アドレス欄のないアプリの画面で開けます。';
+  $('appAdd').style.display = '';
+}
+function initApp() {
+  appRow();
+  $('appAdd').onclick = async () => {
+    if (installEv) { installEv.prompt(); try { await installEv.userChoice; } catch (e) {} installEv = null; appRow(); return; }
+    $('appHow').textContent = isIOS()
+      ? 'iPhone：画面の下の共有ボタン（四角から上向きの矢印）→「ホーム画面に追加」。Chrome のときは右上の共有ボタンから。ホーム画面から開いたアプリは、Safari とは保存場所が別になります（登録したICなどは入れ直しが必要）。'
+      : 'Chrome の右上の「︙」→「ホーム画面に追加」→「インストール」を押してください。';
+  };
+}
+
 function initUi() {
+  initTabs();
+  initGrip();
+  initChips();
+  initApp();
   initMapBtns();
   initTheme();
   initResume();

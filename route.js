@@ -1,5 +1,5 @@
 // KomuMiru：経路の取得・定期比較・判定
-(window.KOMU_FV = window.KOMU_FV || {}).route = 5;
+(window.KOMU_FV = window.KOMU_FV || {}).route = 6;
 
 // ---------- 経路取得 ----------
 async function api(list, extra) {
@@ -35,8 +35,10 @@ function setActive(c) {
   drawActive();
   prepFacilities(c);
 }
-function drawActive() {
-  const c = active, seg = [], pts = [];
+function drawActive() { drawRoute(active); }
+// ルートを地図に描く（ナビ中のルートと、ナビ前の結果のカードのルートで使う）
+function drawRoute(c) {
+  const seg = [], pts = [];
   for (let i = 0; i < c.coords.length - 1; i++)
     seg.push({type:'Feature', properties:{color: COLORS[c.cong[i]] || COLORS.unknown},
       geometry:{type:'LineString', coordinates:[c.coords[i], c.coords[i + 1]]}});

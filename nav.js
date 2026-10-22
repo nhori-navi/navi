@@ -1,5 +1,5 @@
 // KomuMiru：目的地・出口の登録・現在地・走行中の案内・開始と停止
-(window.KOMU_FV = window.KOMU_FV || {}).nav = 5;
+(window.KOMU_FV = window.KOMU_FV || {}).nav = 6;
 
 // ---------- 目的地 ----------
 $('pickBtn').onclick = () => { pickMode = true; icPick = false; $('guide').textContent = '地図上の目的地をタップしてください。'; };
@@ -40,14 +40,76 @@ $('searchBtn').onclick = async () => {
   } catch (e) { $('hits').innerHTML = ''; showErr('検索エラー：' + e.message); }
 };
 $('search').addEventListener('keydown', e => { if (e.key === 'Enter') $('searchBtn').click(); });
-function setDest(p, name) {
-  dest = p; preferGeneral = false; viaEntry = null; destName = name || '地図で指定した場所';
+// noPreview：ナビの再開のときなど、結果のカードのルートを計算しない
+function setDest(p, name, noPreview) {
+  dest = p; preferGeneral = false; viaEntry = null; destName = name || '地図で指定した場所'; arrived = false;
   if (destMarker) destMarker.remove();
   destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
-  $('guide').textContent = '目的地を設定しました。「ナビ開始」を押してください。';
-  if (!navOn) $('start').disabled = false; else { active = null; compare(); }
+  $('guide').textContent = '目的地を設定しました。「▶ ナビ開始」を押してください。';
+  $('next').textContent = '目的地：' + destName;
+  if (!navOn) {
+    $('start').disabled = false;
+    if (typeof showTab === 'function') showTab('route');
+    if (!noPreview) previewRoute();
+  } else { active = null; compare(); }
   // 入口探しに使う地図データを、ナビ開始の前に裏で取っておく
   if (pos) prefetchEntries(Math.min(25000, Math.max(8000, distM(pos, p) * 0.4)));
+}
+
+// ---------- 結果のカード（ナビ前に、ルートを1本だけ計算して見せる） ----------
+let preview = null, previewSeq = 0, arrived = false;
+const esc = t => String(t).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+async function previewRoute() {
+  if (navOn || !dest) return;
+  if (!pos) { renderCard('wait'); return; }
+  const seq = ++previewSeq; renderCard('calc');
+  try {
+    const rs = await api([pos, dest], '');
+    if (seq !== previewSeq || navOn) return;
+    preview = prep(rs[0], 'おまかせ最速');
+    preview.steps = (preview.r.legs[0] && preview.r.legs[0].steps) || [];
+    drawRoute(preview); fitRoute(preview); renderCard('ok');
+  } catch (e) { if (seq === previewSeq && !navOn) { preview = null; renderCard('fail', e.message); } }
+}
+// ルート全体が見えるように地図を寄せる
+function fitRoute(c) {
+  if (!map || typeof map.fitBounds !== 'function') return;
+  let x0 = 180, y0 = 90, x1 = -180, y1 = -90;
+  c.coords.forEach(p => { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
+  try { map.fitBounds([[x0, y0], [x1, y1]], {padding: 50, duration: 800, bearing: 0, pitch: 0}); } catch (e) {}
+}
+// state：calc（計算中）／wait（現在地待ち）／ok／fail（理由 msg）／arrived（到着した）
+function renderCard(state, msg) {
+  const box = $('routeCard');
+  if (!dest || navOn) { box.classList.remove('show'); box.innerHTML = ''; return; }
+  box.classList.add('show');
+  let h = `<div class="cardH">📍 ${esc(destName || '目的地')}</div>`;
+  if (state === 'calc') h += '<div class="small">ルートを計算しています…</div>';
+  else if (state === 'wait') h += '<div class="small">現在地が分かりしだい、ルートを計算します。</div>';
+  else if (state === 'fail') h += `<div class="small" style="color:#c0392b">ルートを計算できませんでした（${esc(msg || '')}）</div>`;
+  else if (state === 'arrived') h += '<div class="rcMain"><b>到着しました</b></div>';
+  else if (state === 'ok' && preview) {
+    const c = preview, min = Math.round(c.r.duration / 60), mw = c.steps.some(isMwStep);
+    h += `<div class="rcMain"><b>到着 ${hhmm(c.r.duration)}</b>（所要 ${min >= 60 ? Math.floor(min / 60) + '時間' + (min % 60) + '分' : min + '分'}）　${(c.r.distance / 1000).toFixed(1)}km</div>
+      <div class="small">${mw ? '高速道路を使うルート' : '一般道だけのルート'}・ルート上の渋滞 ${(jamAhead(c) / 1000).toFixed(1)}km</div>
+      <div class="small">${bdText(burden(c, 0))}</div>`;
+  }
+  h += `<div class="acts"><button id="rcStart" class="primary big"${pos ? '' : ' disabled'}>▶ ${state === 'arrived' ? 'もう一度ナビ' : 'ナビ開始'}</button>`
+    + (state === 'fail' ? '<button id="rcRetry">もう一度計算</button>' : '') + '<button id="rcClear">目的地を消す</button></div>';
+  if (state === 'ok') h += '<div class="small">ナビを始めると、乗るIC（入口）の比較と、渋滞の定期比較が始まります。</div>';
+  box.innerHTML = h;
+  $('rcStart').onclick = () => startNav();
+  $('rcClear').onclick = clearDest;
+  if ($('rcRetry')) $('rcRetry').onclick = previewRoute;
+}
+function clearDest() {
+  if (navOn) return;
+  dest = null; destName = ''; preview = null; previewSeq++; arrived = false;
+  if (destMarker) { destMarker.remove(); destMarker = null; }
+  ['casing', 'seg', 'inc', 'prop'].forEach(id => setData(id, []));
+  $('start').disabled = true; renderCard();
+  $('next').textContent = '目的地を設定してください';
+  $('guide').textContent = '目的地を検索するか、「地図で指定」を押して地図をタップしてください。';
 }
 
 // ---------- 出口の登録 ----------
@@ -85,6 +147,7 @@ function onPos(p) {
     posMarker = new mapboxgl.Marker({element: el}).setLngLat(pos).addTo(map);
     if (!navOn) map.jumpTo({center: pos, zoom: 13});
     prefetchEntries(15000); // 近くの入口のデータを裏で取っておく
+    if (dest && !navOn && !preview) previewRoute(); // 現在地を待っていた結果のカード
     if (!dest) $('guide').textContent = '目的地を検索するか、「地図で指定」を押して地図をタップしてください。';
   } else posMarker.setLngLat(pos);
   if (navOn && follow) followCam();
@@ -99,7 +162,7 @@ function guide() {
   else offCount = 0;
   const my = along(active, pos), rem = totalOf(active) - my;
   if (active.icLeg && rem < 150) { active = null; speak('一般道のルートで案内を続けます'); compare(); return; }
-  if (rem < 40) { speak('目的地に到着しました'); stopNav(); $('next').textContent = '到着しました'; return; }
+  if (rem < 40) { speak('目的地に到着しました'); arrived = true; stopNav(); $('next').textContent = '到着しました'; return; }
   const rd = remDur(active);
   $('summary').textContent = `到着 ${hhmm(rd)}　残り ${Math.round(rd / 60)}分・${fmtDist(rem)}` + (destName ? `　→ ${destName}` : '');
 
@@ -153,6 +216,7 @@ async function startNav(opts) {
   opts = opts || {};
   navOn = true; preferGeneral = !!opts.preferGeneral; viaEntry = opts.viaEntry || null;
   entryPending = !viaEntry; entryRetry = 0; clearTimeout(entryRetryTimer);
+  previewSeq++; arrived = false; renderCard();
   $('start').disabled = true; $('stop').disabled = false; $('judgeOut').innerHTML = '';
   setDriving(true); setFollow(true);
   speak(opts.viaEntry !== undefined ? 'ナビを再開します' : 'ナビを開始します'); keepAwake();
@@ -167,4 +231,6 @@ function stopNav() {
   hideBanner(); $('start').disabled = !dest; $('stop').disabled = true; $('hwy').style.display = 'none';
   $('exitInfo').textContent = ''; $('status').textContent = '停止中';
   clearSession(); setDriving(false); camReset();
+  // 結果のカードに戻す：到着したら「到着しました」、途中で止めたら今の場所からのルートを計算し直す
+  if (dest) { if (arrived) renderCard('arrived'); else previewRoute(); }
 }
