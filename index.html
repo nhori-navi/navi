@@ -16,11 +16,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <script>
 // 版の決まり：KOMU_V＝アプリの版、KOMU_NEED＝ファイルごとに「そのファイルを最後に変えた版」
-window.KOMU_V = 7; window.KOMU_DATE = '2026-10-22';
-window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 7, help: 7, main: 7};
+window.KOMU_V = 8; window.KOMU_DATE = '2026-10-22';
+window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 7, help: 8, main: 7};
 </script>
 </head>
 <body>
@@ -119,11 +119,35 @@ window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 7, help: 7, main: 7};
         <div id="appState" class="small"></div><button id="appAdd" class="primary">📲 ホーム画面に追加</button><div id="appHow" class="small"></div></div>
     </div>
     <div class="card">
+      <div class="cardH">使い方</div>
+      <button id="helpOpen" class="primary">？ 使い方（ヘルプ）</button>
+      <div class="small">使い方ナビ（黄色い吹き出しで手順を案内）は、画面上部の「使い方ナビ」で ON／OFF できます。</div>
+    </div>
+    <div class="card">
       <div class="cardH">このアプリについて</div>
       <div class="small" id="statusRow"><span id="status"></span>　<span id="counter">API利用 0回</span><button class="q" data-q="status">？</button></div>
       <div class="small" id="credit">地図 © Mapbox / 出口・入口・SA・PAのデータ © OpenStreetMap contributors</div>
       <div class="small" id="verBox"></div>
     </div>
+  </div>
+</div>
+<!-- はじめての紹介 -->
+<div id="intro">
+  <div class="inBox">
+    <div id="inEmoji"></div>
+    <div id="inTitle"></div>
+    <div id="inText"></div>
+    <div id="inDots"></div>
+    <div class="inBtns"><button id="inPrev">戻る</button><button id="inNext" class="inMain">次へ</button></div>
+    <button id="inSkip">飛ばす</button>
+  </div>
+</div>
+<!-- ヘルプ -->
+<div id="helpBox">
+  <div class="hHead"><b>使い方</b><button id="helpClose">× 閉じる</button></div>
+  <div id="helpScroll">
+    <div id="helpSecs"></div>
+    <div class="hFoot"><button id="helpIntro">はじめての紹介をもう一度</button><button id="helpRestart" class="primary">使い方ナビを最初から</button></div>
   </div>
 </div>
 <!-- 地図の長押しの小さな画面 -->
@@ -144,12 +168,12 @@ window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 7, help: 7, main: 7};
   <button class="tb" data-tab="ic"><span>🛣</span>IC</button>
   <button class="tb" data-tab="set"><span>⚙️</span>設定</button>
 </div>
-<script src="core.js?v=7"></script>
-<script src="osm.js?v=7"></script>
-<script src="route.js?v=7"></script>
-<script src="nav.js?v=7"></script>
-<script src="ui.js?v=7"></script>
-<script src="help.js?v=7"></script>
-<script src="main.js?v=7"></script>
+<script src="core.js?v=8"></script>
+<script src="osm.js?v=8"></script>
+<script src="route.js?v=8"></script>
+<script src="nav.js?v=8"></script>
+<script src="ui.js?v=8"></script>
+<script src="help.js?v=8"></script>
+<script src="main.js?v=8"></script>
 </body>
 </html>

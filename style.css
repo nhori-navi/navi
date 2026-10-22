@@ -26,8 +26,7 @@ body.help .helpSw{background:#1f3a93;color:#fff}
 .hl{outline:3px solid #f0b400;outline-offset:2px;border-radius:6px;animation:hlp 1.2s ease-in-out infinite}
 #map.hl{outline-offset:-4px;border-radius:0}
 @keyframes hlp{50%{outline-color:rgba(240,180,0,.2)}}
-.q{display:none;border:1px solid #f0b400;background:#fffbe6;color:#8a6d00;border-radius:50%;width:26px;height:26px;padding:0;margin:0 0 0 4px;font-size:13px;font-weight:bold;line-height:24px;text-align:center;vertical-align:middle}
-body.help .q{display:inline-block}
+.q{display:inline-block;border:1px solid #c9b46a;background:#fffbe6;color:#8a6d00;border-radius:50%;width:24px;height:24px;padding:0;margin:0 0 0 4px;font-size:13px;font-weight:bold;line-height:24px;text-align:center;vertical-align:middle}
 #banner{display:none;background:#fff3cd;border:2px solid #e0a800;border-radius:8px;padding:8px;margin:6px 0;font-size:16px}
 #verdict{background:#e8f0fe;border:2px solid #1f3a93;border-radius:8px;padding:8px;margin:6px 0;font-size:16px;font-weight:bold}
 #judgeBtn{background:#1f3a93;color:#fff;border:none;border-radius:6px}
@@ -163,8 +162,6 @@ body.dark #drive{background:#22346e}
 body.dark #drive.near{background:#c0392b}
 body.dark #err{color:#ff8a7a !important}
 body.dark #grip span{background:#8fb0ff;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
-.qline{display:none}
-body.help .qline{display:block}
 body.dark .tb{background:none;border:none;border-radius:0}
 body.dark #navFab{border:4px solid #161d28;border-radius:50%}
 .acts button{white-space:nowrap}
@@ -192,3 +189,34 @@ body.dark .favRow .favGo{background:#1e2633;color:#8fb0ff;border-color:#3a4760}
 body.dark .icRow{background:#1e2633;border-color:#33405a}
 body.dark .icRow.same{border-color:#6f8fe6}
 body.dark .pmBox{background:#161d28;color:#e6e9ef}
+/* ===== 版8：紹介・ヘルプ ===== */
+body.driving:not(.more) .q{display:none}
+#intro{display:none;position:fixed;inset:0;z-index:30;background:rgba(10,20,50,.55);align-items:center;justify-content:center;padding:16px}
+.inBox{width:100%;max-width:400px;border-radius:18px;padding:26px 22px 16px;color:#fff;text-align:center;background:linear-gradient(160deg,#2b4fb5 0%,#1f3a93 55%,#152a6b 100%);box-shadow:0 8px 30px rgba(0,0,0,.4)}
+#inEmoji{font-size:56px;line-height:1.2}
+#inTitle{font-size:21px;font-weight:bold;margin:8px 0 10px}
+#inText{font-size:15px;line-height:1.7;text-align:left;min-height:7.5em}
+#inDots{margin:14px 0 10px}
+#inDots span{display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.35);margin:0 4px}
+#inDots span.on{background:#fff}
+.inBtns{display:flex;gap:10px}
+.inBtns button{flex:1;min-height:46px;border-radius:10px;border:1px solid rgba(255,255,255,.6);background:transparent;color:#fff;font-size:16px;margin:0}
+.inBtns .inMain{background:#fff;color:#1f3a93;font-weight:bold;border-color:#fff}
+#inSkip{margin-top:10px;background:none;border:none;color:rgba(255,255,255,.8);text-decoration:underline;font-size:14px}
+#helpBox{display:none;position:fixed;inset:0;z-index:25;background:#fafafa;flex-direction:column}
+.hHead{display:flex;align-items:center;justify-content:space-between;padding:10px 12px calc(10px) 14px;border-bottom:1px solid #ccc;background:#fff;font-size:18px;color:#1f3a93}
+.hHead button{min-height:40px;border-radius:8px;margin:0}
+#helpScroll{flex:1;overflow:auto;padding:8px 12px calc(16px + env(safe-area-inset-bottom));max-width:720px;width:100%;margin:0 auto}
+.hsec{background:#fff;border:1px solid #ddd;border-radius:10px;margin:8px 0;padding:0;scroll-margin-top:8px}
+.hsec summary{padding:12px 14px;font-weight:bold;color:#1f3a93;cursor:pointer}
+.htext{padding:0 14px 12px;line-height:1.8;font-size:15px}
+.hFoot{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.hFoot button{min-height:46px;border-radius:8px;margin:0}
+body.dark #helpBox{background:#121821}
+body.dark .hHead{background:#161d28;border-color:#2c3646;color:#8fb0ff}
+body.dark .hsec{background:#1e2633;border-color:#33405a}
+body.dark .hsec summary{color:#8fb0ff}
+body.dark .q{background:#3b3010;color:#f0d77a;border-color:#8a7430}
+/* ナビ中の吹き出しは、案内を隠さないよう地図の下の端に浮かせる */
+@media (max-width:899px){ body.driving #tip{position:fixed;top:auto;bottom:calc(100% - var(--splitD) + 12px);left:10px;right:70px;z-index:7;margin:0} }
+@media (orientation:landscape) and (max-height:520px){ body.driving #tip{position:fixed;z-index:7;margin:0;top:10px;bottom:auto;left:calc(10px + env(safe-area-inset-left));right:auto;width:min(420px, calc(100% - 380px))} }
