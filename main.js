@@ -1,5 +1,5 @@
 // KomuMiru：地図の準備・位置情報の開始・アプリ化（最後に読み込む）
-(window.KOMU_FV = window.KOMU_FV || {}).main = 5;
+(window.KOMU_FV = window.KOMU_FV || {}).main = 5.1;
 // ほかのファイルの関数をすべて読み込んでから、地図と位置情報を動かし始める
 
 // ---------- 地図の準備 ----------
@@ -15,23 +15,24 @@ map.on('load', () => {
   map.addLayer({id:'traffic', type:'line', source:'traffic', 'source-layer':'traffic', paint:{
     'line-width':['interpolate',['linear'],['zoom'],8,1.5,14,4],
     'line-color':['match',['get','congestion'],'low',COLORS.low,'moderate',COLORS.moderate,'heavy',COLORS.heavy,'severe',COLORS.severe,'#999'],
-    'line-opacity':0.85}});
+    'line-opacity':0.85, 'line-emissive-strength':0.8}});
   const empty = {type:'FeatureCollection', features:[]};
   ['casing', 'seg', 'prop', 'inc', 'ics'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
   map.addLayer({id:'prop', type:'line', source:'prop', layout:{'line-cap':'round'},
-    paint:{'line-color':'#8e44ad', 'line-width':6, 'line-dasharray':[1.5, 1]}});
+    paint:{'line-color':'#8e44ad', 'line-width':6, 'line-dasharray':[1.5, 1], 'line-emissive-strength':1}});
   map.addLayer({id:'casing', type:'line', source:'casing', layout:{'line-cap':'round','line-join':'round'},
-    paint:{'line-color':'#1f3a93', 'line-width':11}});
+    paint:{'line-color':'#1f3a93', 'line-width':11, 'line-emissive-strength':1}});
   map.addLayer({id:'seg', type:'line', source:'seg', layout:{'line-cap':'round','line-join':'round'},
-    paint:{'line-color':['get','color'], 'line-width':5}});
+    paint:{'line-color':['get','color'], 'line-width':5, 'line-emissive-strength':1}});
   map.addLayer({id:'inc', type:'circle', source:'inc',
-    paint:{'circle-radius':9, 'circle-color':'#8e44ad', 'circle-stroke-color':'#fff', 'circle-stroke-width':2}});
+    paint:{'circle-radius':9, 'circle-color':'#8e44ad', 'circle-stroke-color':'#fff', 'circle-stroke-width':2, 'circle-emissive-strength':1}});
   map.addLayer({id:'ics', type:'circle', source:'ics',
-    paint:{'circle-radius':7, 'circle-color':'#ff8c00', 'circle-stroke-color':'#fff', 'circle-stroke-width':2}});
+    paint:{'circle-radius':7, 'circle-color':'#ff8c00', 'circle-stroke-color':'#fff', 'circle-stroke-width':2, 'circle-emissive-strength':1}});
   map.addLayer({id:'icsLabel', type:'symbol', source:'ics',
     layout:{'text-field':['get','name'], 'text-size':12, 'text-offset':[0, 1.3]},
-    paint:{'text-color':'#b35900', 'text-halo-color':'#fff', 'text-halo-width':1.5}});
+    paint:{'text-color':'#b35900', 'text-halo-color':'#fff', 'text-halo-width':1.5, 'text-emissive-strength':1}});
   renderIcs();
+  routeStyle(document.body.classList.contains('dark')); // 夜ならルートの縁取りを明るく
 });
 map.on('error', e => showErr('地図エラー：' + (e.error && e.error.message ? e.error.message : '不明')));
 map.on('dragstart', () => { if (navOn) setFollow(false); });
