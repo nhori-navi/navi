@@ -5,7 +5,7 @@
 <title>KomuMiru</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="description" content="渋滞を見ながら、高速のまま・降りる・別の入口から乗るを比べる自分用カーナビ">
-<meta name="theme-color" content="#1f3a93">
+<meta name="theme-color" content="#a9502b">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
 <!-- iPhone でホーム画面に追加したとき用 -->
@@ -16,11 +16,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 <script>
 // 版の決まり：KOMU_V＝アプリの版、KOMU_NEED＝ファイルごとに「そのファイルを最後に変えた版」
-window.KOMU_V = 8; window.KOMU_DATE = '2026-10-22';
-window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 7, help: 8, main: 7};
+window.KOMU_V = 9; window.KOMU_DATE = '2026-10-31';
+window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 9, help: 9, main: 7};
 </script>
 </head>
 <body>
@@ -28,8 +28,9 @@ window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 7, help: 8, main: 7};
 <div id="grip" title="上下に動かして地図の広さを変える（2回タップで元に戻す）"><span></span></div>
 <div id="panel">
   <!-- いつも出す部分（タブの上） -->
-  <div id="top"><span id="appName">KomuMiru</span><button class="q" data-q="app">？</button><label class="helpSw"><input type="checkbox" id="helpChk">使い方ナビ</label></div>
+  <div id="top"><span id="appName">KomuMiru</span><button class="q" data-q="app">？</button><label class="helpSw">使い方ナビ<input type="checkbox" id="helpChk"></label></div>
   <div id="verWarn"></div>
+  <div id="updNote"><span id="updText"></span><button id="updGo" class="primary">開き直す</button></div>
   <div id="tip"><div id="tipText"></div><div id="tipWarn"></div><button class="x" id="tipX" aria-label="閉じる">×</button></div>
   <div id="resume"><div id="resumeText"></div><button id="resumeYes" class="primary">続ける</button><button id="resumeNo">やめる</button></div>
   <div id="next">目的地を設定してください</div>
@@ -128,6 +129,7 @@ window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 7, help: 8, main: 7};
       <div class="small" id="statusRow"><span id="status"></span>　<span id="counter">API利用 0回</span><button class="q" data-q="status">？</button></div>
       <div class="small" id="credit">地図 © Mapbox / 出口・入口・SA・PAのデータ © OpenStreetMap contributors</div>
       <div class="small" id="verBox"></div>
+      <a id="seriesLink" href="https://nhori-navi.github.io/">ミルシリーズのTOPへ</a>
     </div>
   </div>
 </div>
@@ -168,12 +170,12 @@ window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 7, help: 8, main: 7};
   <button class="tb" data-tab="ic"><span>🛣</span>IC</button>
   <button class="tb" data-tab="set"><span>⚙️</span>設定</button>
 </div>
-<script src="core.js?v=8"></script>
-<script src="osm.js?v=8"></script>
-<script src="route.js?v=8"></script>
-<script src="nav.js?v=8"></script>
-<script src="ui.js?v=8"></script>
-<script src="help.js?v=8"></script>
-<script src="main.js?v=8"></script>
+<script src="core.js?v=9"></script>
+<script src="osm.js?v=9"></script>
+<script src="route.js?v=9"></script>
+<script src="nav.js?v=9"></script>
+<script src="ui.js?v=9"></script>
+<script src="help.js?v=9"></script>
+<script src="main.js?v=9"></script>
 </body>
 </html>
