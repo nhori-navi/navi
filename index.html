@@ -16,11 +16,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 <script>
 // 版の決まり：KOMU_V＝アプリの版、KOMU_NEED＝ファイルごとに「そのファイルを最後に変えた版」
-window.KOMU_V = 9; window.KOMU_DATE = '2026-10-31';
-window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 9, help: 9, main: 7};
+window.KOMU_V = 10; window.KOMU_DATE = '2026-10-31';
+window.KOMU_NEED = {core: 7, osm: 7, route: 10, nav: 10, ui: 10, log: 10, help: 10, main: 7};
 </script>
 </head>
 <body>
@@ -76,7 +76,13 @@ window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 9, help: 9, main: 7};
 
   <!-- 📊 比較 -->
   <div class="pane" id="tab-cmp">
-    <div class="card">
+    <!-- 版10：走った記録（ナビ前は上、ナビ中は候補の下） -->
+    <div class="card" id="logCard">
+      <div class="cardH">走った記録<button class="q" data-q="log">？</button></div>
+      <div id="logMonth" class="logMonth"></div>
+      <div id="logList"><div class="small">読み込み中…</div></div>
+    </div>
+    <div class="card" id="candCard">
       <div class="cardH">定期比較の候補<button class="q" data-q="cands">？</button></div>
       <div class="small">ナビ中は確認間隔ごとに、今のルートとほかの候補を最新の渋滞で計算し直して、ここに並べます。もっと早い候補が「提案する差」以上あれば、上の黄色の枠と声で知らせます。</div>
       <div id="cands"><div class="small">ナビを始めると、候補がここに出ます。</div></div>
@@ -125,6 +131,13 @@ window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 9, help: 9, main: 7};
       <div class="small">使い方ナビ（黄色い吹き出しで手順を案内）は、画面上部の「使い方ナビ」で ON／OFF できます。</div>
     </div>
     <div class="card">
+      <div class="cardH">控え（まとめて書き出す・読み込む）<button class="q" data-q="hikae">？</button></div>
+      <div class="small">出口の登録・お気に入り・設定・走った記録を、1つのファイルにまとめます。機種変更のときや、念のための控えに。読み込むときは今あるものに足すだけで、消しません。</div>
+      <button id="bkExport" class="primary">📦 まとめて書き出す</button><button id="bkImport">📥 控えを読み込む</button>
+      <input type="file" id="bkFile" accept=".json,application/json" hidden>
+      <div class="small" id="bkMsg"></div>
+    </div>
+    <div class="card">
       <div class="cardH">このアプリについて</div>
       <div class="small" id="statusRow"><span id="status"></span>　<span id="counter">API利用 0回</span><button class="q" data-q="status">？</button></div>
       <div class="small" id="credit">地図 © Mapbox / 出口・入口・SA・PAのデータ © OpenStreetMap contributors</div>
@@ -133,6 +146,8 @@ window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 9, help: 9, main: 7};
     </div>
   </div>
 </div>
+<!-- 版10：着いたときのまとめ（地図の上） -->
+<div id="sumCard"></div>
 <!-- はじめての紹介 -->
 <div id="intro">
   <div class="inBox">
@@ -165,17 +180,18 @@ window.KOMU_NEED = {core: 7, osm: 7, route: 7, nav: 7, ui: 9, help: 9, main: 7};
 <!-- 下のタブ -->
 <div id="tabbar">
   <button class="tb" data-tab="route"><span>🧭</span>ルート</button>
-  <button class="tb" data-tab="cmp"><span>📊</span>比較</button>
+  <button class="tb" data-tab="cmp"><span>📊</span>比較・記録</button>
   <button id="navFab" disabled><b>▶</b><small>ナビ開始</small></button>
   <button class="tb" data-tab="ic"><span>🛣</span>IC</button>
   <button class="tb" data-tab="set"><span>⚙️</span>設定</button>
 </div>
-<script src="core.js?v=9"></script>
-<script src="osm.js?v=9"></script>
-<script src="route.js?v=9"></script>
-<script src="nav.js?v=9"></script>
-<script src="ui.js?v=9"></script>
-<script src="help.js?v=9"></script>
-<script src="main.js?v=9"></script>
+<script src="core.js?v=10"></script>
+<script src="osm.js?v=10"></script>
+<script src="route.js?v=10"></script>
+<script src="nav.js?v=10"></script>
+<script src="ui.js?v=10"></script>
+<script src="log.js?v=10"></script>
+<script src="help.js?v=10"></script>
+<script src="main.js?v=10"></script>
 </body>
 </html>
