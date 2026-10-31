@@ -5,9 +5,10 @@
 // ・ナビの再開（30分以内に開き直したら続けるか聞く）
 // ・版の表示と古いファイルの知らせ
 // （版6）下のタブと真ん中の丸い▶、境目のつまみ、押して選ぶ並び、ホーム画面に追加
+// （版11）有料道路なしの再開、家へ・最近の行き先（plan.js）の起動
 // （版10）保存できなかったときの知らせ、走った記録（log.js）の起動
 // （版9）比べ方の設定の保存、新しい版の知らせ、色をテラコッタ系に（地図のルートの線は渋滞の赤と見分けるため紺のまま）
-(window.KOMU_FV = window.KOMU_FV || {}).ui = 10;
+(window.KOMU_FV = window.KOMU_FV || {}).ui = 11;
 
 function lsGetStr(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
 // 版10：保存できなかったら赤い字で知らせる（同じ知らせは1回だけ）
@@ -171,7 +172,7 @@ function initTheme() {
 const SESSION_KEY = 'navi_session', SESSION_MIN = 30;
 function saveSession() {
   if (!navOn || !dest) return;
-  lsSetStr(SESSION_KEY, JSON.stringify({t: Date.now(), dest, destName, viaEntry, preferGeneral, vias}));
+  lsSetStr(SESSION_KEY, JSON.stringify({t: Date.now(), dest, destName, viaEntry, preferGeneral, avoidToll, vias}));
 }
 function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
 function initResume() {
@@ -189,7 +190,7 @@ function initResume() {
     $('resume').style.display = 'none';
     vias = Array.isArray(s.vias) ? s.vias.slice(0, 3) : []; drawVias();
     setDest(s.dest, s.destName || '', true);
-    const go = () => startNav({viaEntry: s.viaEntry || null, preferGeneral: !!s.preferGeneral, resume: true});
+    const go = () => startNav({viaEntry: s.viaEntry || null, preferGeneral: !!s.preferGeneral, avoidToll: !!s.avoidToll, resume: true});
     if (pos) go();
     else {
       $('guide').textContent = '現在地が分かりしだい、ナビを再開します。';
@@ -412,4 +413,5 @@ function initUi() {
   $('stop').onclick = stopPress;
   readShareLink(); // 共有リンクから開いたとき
   if (typeof initLog === 'function') initLog(); // 版10：走った記録・控え
+  if (typeof initPlan === 'function') initPlan(); // 版11：家へ・最近の行き先
 }

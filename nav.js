@@ -1,5 +1,5 @@
 // KomuMiru：目的地・出口の登録・現在地・走行中の案内・開始と停止
-(window.KOMU_FV = window.KOMU_FV || {}).nav = 10;
+(window.KOMU_FV = window.KOMU_FV || {}).nav = 11;
 
 // ---------- 目的地 ----------
 $('pickBtn').onclick = () => { pickMode = true; icPick = false; $('guide').textContent = '地図上の目的地をタップしてください。'; };
@@ -43,6 +43,8 @@ $('search').addEventListener('keydown', e => { if (e.key === 'Enter') $('searchB
 // noPreview：ナビの再開のときなど、結果のカードのルートを計算しない
 function setDest(p, name, noPreview) {
   dest = p; preferGeneral = false; viaEntry = null; destName = name || '地図で指定した場所'; arrived = false;
+  if (typeof avoidToll !== 'undefined' && !navOn) avoidToll = false;
+  if (typeof addHist === 'function') addHist(p, destName); // 版11：最近の行き先
   if (destMarker) destMarker.remove();
   destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
   $('guide').textContent = '目的地を設定しました。「▶ ナビ開始」を押してください。';
@@ -65,7 +67,7 @@ const fmtAcc = m => m < 1000 ? Math.round(m) + 'm' : (m / 1000).toFixed(1) + 'km
 const fromPt = () => origin ? origin.p : pos;
 async function previewRoute() {
   if (navOn || !dest) return;
-  icCmp = null;
+  icCmp = null; if (typeof planReset === 'function') planReset(); // 版11
   if (!origin) {
     if (!pos) { renderCard('wait'); return; }
     if (isRough() && !forceRough) { renderCard('rough'); return; }
@@ -112,8 +114,8 @@ function renderCard(state, msg) {
   h += `<div class="acts"><button id="rcStart" class="primary big"${pos ? '' : ' disabled'}>▶ ${state === 'arrived' ? 'もう一度ナビ' : origin ? '現在地からナビ開始' : 'ナビ開始'}</button>`
     + (state === 'fail' ? '<button id="rcRetry">もう一度計算</button>' : '') + '<button id="rcClear">目的地を消す</button></div>';
   h += '<div class="acts acts2"><button id="rcFav">★ 登録</button><button id="rcShare">🔗 共有</button>'
-    + (state === 'ok' ? '<button id="rcIc">🛣 乗るICを比べる</button>' : '') + '</div>';
-  if (state === 'ok') h += icCmpHtml();
+    + (state === 'ok' ? '<button id="rcIc">🛣 乗るICを比べる</button>' + (typeof planBtns === 'function' ? planBtns() : '') : '') + '</div>';
+  if (state === 'ok') h += icCmpHtml() + (typeof planHtml === 'function' ? planHtml() : '');
   box.innerHTML = h;
   $('rcStart').onclick = () => startNav();
   $('rcClear').onclick = clearDest;
@@ -126,6 +128,7 @@ function renderCard(state, msg) {
   box.querySelectorAll('[data-rmvia]').forEach(b => b.onclick = () => removeVia(Number(b.dataset.rmvia)));
   box.querySelectorAll('[data-icgo]').forEach(b => b.onclick = () => { const r = icCmp.rows[Number(b.dataset.icgo)]; startNav({viaEntry: {p: r.x.p, name: r.x.name}}); });
   box.querySelectorAll('[data-icmap]').forEach(b => b.onclick = () => { const r = icCmp.rows[Number(b.dataset.icmap)]; drawRoute(r.x.pc); fitRoute(r.x.pc); });
+  if (typeof planBind === 'function') planBind(); // 版11
 }
 function clearDest() {
   if (navOn) return;
@@ -176,13 +179,17 @@ try { favs = JSON.parse(localStorage.getItem('navi_favs') || '[]') || []; } catc
 function saveFavs() {
   try { localStorage.setItem('navi_favs', JSON.stringify(favs)); } catch (e) { showErr('お気に入りの保存に失敗しました'); }
   renderFavs();
+  if (typeof renderHome === 'function') { renderHome(); renderHist(); } // 版11
 }
 function renderFavs() {
   const el = $('favList'); if (!el) return;
+  const home = typeof homeFav === 'function' ? homeFav() : null; // 版11：家にしたお気に入り
   el.innerHTML = favs.length
-    ? favs.map((f, i) => `<div class="favRow"><button class="favGo" data-fav="${i}">★ ${esc(f.name)}</button><button class="favDel" data-favdel="${i}">削除</button></div>`).join('')
+    ? favs.map((f, i) => `<div class="favRow"><button class="favGo" data-fav="${i}">${home === f ? '🏠' : '★'} ${esc(f.name)}</button>`
+      + `<button class="favHome${home === f ? ' on' : ''}" data-favhome="${i}" aria-label="家にする" title="家にする">🏠</button><button class="favDel" data-favdel="${i}">削除</button></div>`).join('')
     : '<div class="small">まだありません。結果のカードの「★ 登録」で追加できます。</div>';
   el.querySelectorAll('[data-fav]').forEach(b => b.onclick = () => { const f = favs[Number(b.dataset.fav)]; setDest(f.p, f.name); });
+  el.querySelectorAll('[data-favhome]').forEach(b => b.onclick = () => setHome(Number(b.dataset.favhome)));
   el.querySelectorAll('[data-favdel]').forEach(b => b.onclick = () => {
     const i = Number(b.dataset.favdel);
     if (confirm(favs[i].name + ' をお気に入りから削除しますか？')) { favs.splice(i, 1); saveFavs(); }
@@ -400,12 +407,13 @@ function guide() {
 // ---------- 開始・停止 ----------
 function restartTimer() { clearInterval(timer); timer = setInterval(compare, Number($('interval').value) * 60000); }
 $('interval').onchange = () => { if (navOn) restartTimer(); };
-// ナビを始める。opts：{viaEntry：乗る入口, preferGeneral：一般道を選んでいたか, resume：再開か}
+// ナビを始める。opts：{viaEntry：乗る入口, preferGeneral：一般道を選んでいたか, avoidToll：有料道路なしで行くか（版11）, resume：再開か}
 async function startNav(opts) {
   if (!pos) { showErr('現在地がまだ取得できていません。少し待ってから押してください。'); return; }
   if (!dest) return;
   opts = opts || {};
   navOn = true; preferGeneral = !!opts.preferGeneral; viaEntry = opts.viaEntry || null;
+  if (typeof avoidToll !== 'undefined') avoidToll = !!opts.avoidToll; // 版11：有料道路なしで始める
   entryPending = !viaEntry; entryRetry = 0; clearTimeout(entryRetryTimer);
   previewSeq++; arrived = false; icCmp = null; renderCard(); clearOrigin(true); // ナビはいつも現在地から
   $('start').disabled = true; $('stop').disabled = false; $('judgeOut').innerHTML = '';

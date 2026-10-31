@@ -277,3 +277,34 @@ body.dark .logRow .lD, body.dark .logRow .lN{color:#b0a69f}
 body.dark .logRow .lN b{color:#9fd8a8}
 #bkMsg:empty{display:none}
 #bkMsg{margin-top:4px}
+/* 版11：🏠 家へ・最近の行き先・お気に入りの家・有料道路なし・出発時刻 */
+.homeBtn{display:block;width:100%;min-height:54px !important;margin:0 0 6px;border-radius:14px !important;border:none;background:#a9502b;color:#fff;font-size:19px;font-weight:bold;text-align:left;padding:6px 16px;box-shadow:0 2px 6px rgba(169,80,43,.3)}
+.homeBtn small{display:block;font-size:12px;font-weight:normal;opacity:.9}
+.homeBtn.unset{background:#fff;color:#a9502b;border:1px dashed #a9502b;box-shadow:none}
+.favRow .favHome{flex:none;width:44px;padding:0;font-size:18px;opacity:.45;background:#fff;border:1px solid #ddd}
+.favRow .favHome.on{opacity:1;border-color:#a9502b;background:#fbeee6}
+.histH{font-size:13px;font-weight:bold;color:#6e3218;margin:8px 0 2px}
+.histRow{display:flex;gap:4px;margin:3px 0}
+.histRow .histGo{flex:1;text-align:left;background:#fff;border:1px solid #e3d6ce;color:#222;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.histRow .histGo span{font-size:12px;color:#888;flex:none}
+.histRow .histDel{flex:none;width:40px;padding:0;color:#888}
+.histFoot{display:flex;gap:6px;justify-content:flex-end;margin:2px 0 4px}
+.histFoot button{font-size:13px;min-height:34px !important;padding:2px 10px}
+.planBox{border-top:1px dashed #ecc9b6;margin-top:8px;padding-top:6px}
+.tRow{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;margin:6px 0;font-size:14px}
+.tRow .tL{flex:none;width:100%}
+.tRow .tBar{flex:1;height:10px;background:#f1e6df;border-radius:5px;overflow:hidden}
+.tRow .tBar i{display:block;height:100%;background:#d98a64;border-radius:5px}
+.tRow .tD{flex:none;width:6.2em;text-align:right}
+.tRow.best{font-weight:bold}
+.tRow.best .tBar i{background:#2e7d32}
+body.dark .homeBtn{background:#b85a33}
+body.dark .homeBtn.unset{background:#262220;color:#f0a27e;border-color:#f0a27e}
+body.dark .favRow .favHome{background:#262220;border-color:#4a413c}
+body.dark .favRow .favHome.on{background:#3a2418;border-color:#d98a64}
+body.dark .histH{color:#f0a27e}
+body.dark .histRow .histGo{background:#262220;border-color:#4a413c;color:#e6e9ef}
+body.dark .histRow .histGo span, body.dark .histRow .histDel{color:#b0a69f}
+body.dark .planBox{border-color:#4a413c}
+body.dark .tRow .tBar{background:#3a3330}
+body.dark .tRow.best .tBar i{background:#5fae6a}

@@ -1,5 +1,5 @@
 // KomuMiru：経路の取得・定期比較・判定
-(window.KOMU_FV = window.KOMU_FV || {}).route = 10;
+(window.KOMU_FV = window.KOMU_FV || {}).route = 11;
 
 // ---------- 経路取得 ----------
 // list の最後が目的地なら、その前に残りの経由地を自動で入れる（経由地は「止まる所」、
@@ -80,20 +80,23 @@ async function compare() {
         const target = here + (total - here) * 0.5; let j = n.i; // 通るだけの点は次の経由地より手前に置く
         while (j < active.coords.length - 1 && active.cum[j] < target) j++;
         const nm = active.name;
-        curP = api([pos, active.coords[j], dest], '&waypoints=0;2').then(rs => prep(rs[0], nm)).catch(e => { showErr(e.message); return null; });
+        curP = api([pos, active.coords[j], dest], '&waypoints=0;2' + (avoidToll ? '&exclude=toll' : '')).then(rs => prep(rs[0], nm)).catch(e => { showErr(e.message); return null; });
       }
     }
     const altP = api([pos, dest], '&alternatives=true')
       .then(rs => rs.map((r, i) => prep(r, i ? '代替ルート' + i : 'おまかせ最速'))).catch(e => { showErr(e.message); return []; });
     const genP = api([pos, dest], '&exclude=motorway')
       .then(rs => [prep(rs[0], '一般道のみ')]).catch(e => { showErr(e.message); return []; });
-    const [cur, alts, gens] = await Promise.all([curP, altP, genP]);
-    const cands = alts.concat(gens);
+    // 版11：有料道路なしで始めたときは、有料道路なしのルートも毎回計算する
+    const tollP = avoidToll ? api([pos, dest], '&exclude=toll').then(rs => [prep(rs[0], '有料道路なし')]).catch(e => { showErr(e.message); return []; }) : Promise.resolve([]);
+    const [cur, alts, gens, tolls] = await Promise.all([curP, altP, genP, tollP]);
+    const cands = alts.concat(gens, tolls);
 
     if (!active) {
       let pick = null;
       if (viaEntry && cur) pick = cur;
       else if (preferGeneral && gens.length) pick = gens[0];
+      else if (avoidToll && tolls.length) pick = tolls[0];
       else if (cands.length) { cands.sort((a, b) => a.r.duration - b.r.duration); pick = cands[0]; }
       if (!pick) { $('status').textContent = 'ルートを取得できませんでした'; return; }
       setActive(pick);
@@ -153,7 +156,9 @@ async function judge(auto, withEntry) {
     const my = along(active, pos), st = active.steps[curStepIdx(my)];
     const onMw = st ? isMwStep(st) : false;
     const we = !onMw && (withEntry || entryPending);
+    const tP = typeof tollCand === 'function' ? tollCand() : Promise.resolve(null); // 版11：有料道路を使わない案
     let cands = onMw ? await highwayCands(my) : await generalCands(my, we);
+    const tc = await tP; if (tc) cands.push(tc);
     const uniq = [];
     cands.forEach(x => { if (x.pc && uniq.some(y => y.pc && sameAs(x.pc, y.pc))) return; uniq.push(x); });
     let note = onMw ? '高速道路上の判定' : '一般道上の判定';

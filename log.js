@@ -4,7 +4,7 @@
 // ・途中の記録は30秒ごとに下書き（draft）として残し、30分以内の「ナビの再開」ではそのまま続ける
 // ・到着か停止で、1km以上または3分以上走っていれば記録として残し、まとめのカードを出す（運転中は出さない）
 // ・記録は新しい順に100回分まで（LOG_MAX）。古いものから消す
-(window.KOMU_FV = window.KOMU_FV || {}).log = 10;
+(window.KOMU_FV = window.KOMU_FV || {}).log = 11;
 
 const LOG_DB = 'komumiru', LOG_MAX = 100, DRAFT_MIN = 30;
 const SLOW_KMH = 10;       // これより遅い間を「のろのろ・停止」に数える
@@ -302,7 +302,7 @@ async function renderLog() {
 }
 
 // ---------- まとめて控える（書き出し・読み込み） ----------
-const BK_KEYS = ['navi_cmp', 'navi_theme', 'navi_view', 'navi_help', 'navi_split', 'navi_split_drive'];
+const BK_KEYS = ['navi_cmp', 'navi_theme', 'navi_view', 'navi_help', 'navi_split', 'navi_split_drive', 'navi_home', 'navi_hist']; // 版11：家・最近の行き先も
 async function exportAll() {
   let drives = [];
   try { drives = await allDrives(); } catch (e) {}
