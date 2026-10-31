@@ -1,5 +1,5 @@
 // KomuMiru：目的地・出口の登録・現在地・走行中の案内・開始と停止
-(window.KOMU_FV = window.KOMU_FV || {}).nav = 11;
+(window.KOMU_FV = window.KOMU_FV || {}).nav = 12;
 
 // ---------- 目的地 ----------
 $('pickBtn').onclick = () => { pickMode = true; icPick = false; $('guide').textContent = '地図上の目的地をタップしてください。'; };
@@ -79,6 +79,7 @@ async function previewRoute() {
     preview = prep(rs[0], 'おまかせ最速');
     preview.steps = [].concat(...preview.r.legs.map(l => l.steps || []));
     drawRoute(preview); fitRoute(preview); renderCard('ok');
+    if (typeof wxFetch === 'function') wxFetch(preview); // 版12：出発前のひとこと（天気）
   } catch (e) { if (seq === previewSeq && !navOn) { preview = null; renderCard('fail', e.message); } }
 }
 // ルート全体が見えるように地図を寄せる
@@ -109,7 +110,7 @@ function renderCard(state, msg) {
     const c = preview, mw = c.steps.some(isMwStep);
     h += `<div class="rcMain"><b>到着 ${hhmm(c.r.duration)}</b>（所要 ${durTxt(c.r.duration)}）　${(c.r.distance / 1000).toFixed(1)}km</div>
       <div class="small">${origin ? '今出発した場合・' : ''}${mw ? '高速道路を使うルート' : '一般道だけのルート'}・ルート上の渋滞 ${(jamTotal(c) / 1000).toFixed(1)}km</div>
-      <div class="small">${bdText(burden(c, 0))}</div>`;
+      <div class="small">${bdText(burden(c, 0))}</div>` + (typeof wxHtml === 'function' ? wxHtml() : '');
   }
   h += `<div class="acts"><button id="rcStart" class="primary big"${pos ? '' : ' disabled'}>▶ ${state === 'arrived' ? 'もう一度ナビ' : origin ? '現在地からナビ開始' : 'ナビ開始'}</button>`
     + (state === 'fail' ? '<button id="rcRetry">もう一度計算</button>' : '') + '<button id="rcClear">目的地を消す</button></div>';
@@ -420,7 +421,8 @@ async function startNav(opts) {
   if (typeof hideSummary === 'function' && document.body.classList.contains('sum')) hideSummary();
   setDriving(true); setFollow(true);
   if (typeof recStart === 'function') recStart({resume: !!opts.resume}); // 版10：走った記録
-  speak(opts.resume ? 'ナビを再開します' : 'ナビを開始します'); keepAwake();
+  const wxs = !opts.resume && typeof wxStartSay === 'function' ? wxStartSay() : ''; // 版12：天気の予報を1回だけ
+  speak(opts.resume ? 'ナビを再開します' : 'ナビを開始します' + (wxs ? '。' + wxs : '')); keepAwake();
   followCam({zoom: 15});
   active = null; await compare(); restartTimer(); saveSession();
   if (active && !judging) judge(true);

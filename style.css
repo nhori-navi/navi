@@ -308,3 +308,7 @@ body.dark .histRow .histGo span, body.dark .histRow .histDel{color:#b0a69f}
 body.dark .planBox{border-color:#4a413c}
 body.dark .tRow .tBar{background:#3a3330}
 body.dark .tRow.best .tBar i{background:#5fae6a}
+/* 版12：出発前のひとこと */
+.wxBox{margin:6px 0 2px;padding:6px 10px;border-radius:10px;background:#f6f1ec;line-height:1.5}
+.wxL{font-size:14px;margin:1px 0}
+body.dark .wxBox{background:#2e2926}

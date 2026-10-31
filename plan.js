@@ -3,7 +3,8 @@
 // ・最近の行き先：検索や地図で決めた行き先を新しい順に10件（navi_hist）。お気に入りと同じ場所は入れない
 // ・有料道路なしと比べる：結果のカードで exclude=toll を1回計算して並べる。「この道でナビ開始」は avoidToll で始める
 // ・出発時刻で比べる：今・30分後・1時間後・1時間半後・2時間後（depart_at）。5回計算する
-(window.KOMU_FV = window.KOMU_FV || {}).plan = 11;
+// ・（版12）出発前のひとこと：道中と行き先の天気（Open-Meteo）、日の入り。ナビ開始のときに1回だけ読み上げ
+(window.KOMU_FV = window.KOMU_FV || {}).plan = 12;
 
 // 有料道路を使わないルートで始めたか（ルートを外れて組み直すとき・定期比較の「今のルート」もそれに合わせる）
 let avoidToll = false;
@@ -152,6 +153,111 @@ async function tollCand() {
     if (active && sameAs(c, active)) return null;
     return {label: '有料道路を使わない', dur: c.r.duration, dist: c.r.distance, geom: c.coords, act: () => setActive(c), pc: c};
   } catch (e) { return null; }
+}
+
+// ---------- 版12：出発前のひとこと（道中と行き先の天気・日の入り） ----------
+// 結果のカードのルートの上、最大6か所（出発地・約25kmごと・行き先）を「そこを通るころ」の予報で見る。
+// 天気は Open-Meteo（無料・鍵なし）に1回だけ問い合わせる（地点は0.01°＝約1km単位）。同じルートなら30分は取り直さない
+const WX_STEP_M = 25000, WX_MAX = 6, WX_KEEP_MIN = 30;
+let wxCache = null; // {key, t, state:'calc'|'ok'|'fail', lines:[{ic, text}], say, sun}
+function wxKey(c) { const a = c.coords[0], b = c.coords[c.coords.length - 1]; return [a, b].map(p => p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(';') + '|' + Math.round(c.r.distance / 1000); }
+function wxPoints(c) {
+  const D = totalOf(c), list = [0];
+  for (let a = WX_STEP_M; a < D - WX_STEP_M / 2; a += WX_STEP_M) list.push(a);
+  list.push(D);
+  let use = list;
+  if (list.length > WX_MAX) { use = []; for (let i = 0; i < WX_MAX; i++) use.push(list[Math.round(i * (list.length - 1) / (WX_MAX - 1))]); }
+  return use.map((a, i) => ({a, p: pointAt(c, a), sec: timeAt(c, a), last: i === use.length - 1}));
+}
+// 天気の言い方：雪（降雪 >0 か天気の番号 71〜77・85・86）／雨（1時間に0.5mm以上か、強いにわか雨・雷雨）
+function wxKind(w) {
+  if (!w) return null;
+  if ((w.sn || 0) > 0 || [71, 73, 75, 77, 85, 86].includes(w.code)) return 'snow';
+  if ((w.pr || 0) >= 0.5 || [65, 67, 81, 82, 95, 96, 99].includes(w.code)) return 'rain';
+  return null;
+}
+async function wxFetch(c) {
+  if (!c || !c.coords) return;
+  const key = wxKey(c);
+  if (wxCache && wxCache.key === key && (wxCache.state === 'calc' || Date.now() - wxCache.t < WX_KEEP_MIN * 60000)) { wxCache.sun = sunInfo(c); return; }
+  const pts = wxPoints(c), t0 = Date.now();
+  wxCache = {key, t: t0, state: 'calc', lines: [], say: '', sun: sunInfo(c)};
+  const my = wxCache;
+  try {
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + pts.map(x => x.p[1].toFixed(2)).join(',')
+      + '&longitude=' + pts.map(x => x.p[0].toFixed(2)).join(',')
+      + '&hourly=precipitation,snowfall,temperature_2m,weather_code&forecast_days=3&timezone=Asia%2FTokyo';
+    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 12000);
+    const res = await fetch(url, {signal: ctl.signal}); clearTimeout(tm);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    let js = await res.json(); if (!Array.isArray(js)) js = [js];
+    const z = n => String(n).padStart(2, '0');
+    pts.forEach((x, i) => {
+      const at = new Date(t0 + x.sec * 1000), hr = (js[i] && js[i].hourly) || {};
+      const k = `${at.getFullYear()}-${z(at.getMonth() + 1)}-${z(at.getDate())}T${z(at.getHours())}:00`;
+      const n = (hr.time || []).indexOf(k);
+      x.at = at;
+      x.w = n < 0 ? null : {pr: hr.precipitation ? hr.precipitation[n] : null, sn: hr.snowfall ? hr.snowfall[n] : null,
+        t: hr.temperature_2m ? hr.temperature_2m[n] : null, code: hr.weather_code ? hr.weather_code[n] : null};
+    });
+    if (pts.every(x => !x.w)) throw new Error('予報がありません');
+    my.lines = wxLines(pts); my.say = wxSay(pts); my.state = 'ok';
+  } catch (e) { my.state = 'fail'; }
+  if (wxCache === my && !navOn && dest && preview && wxKey(preview) === key) renderCard('ok');
+}
+function wxWhere(x) { return x.last ? `行き先（${destName || '目的地'}）` : x.a < 1000 ? '出発地あたり' : `${Math.round(x.a / 1000)}km先あたり`; }
+function wxTime(d) { const m = Math.round(d.getMinutes() / 10) * 10, h = d.getHours() + (m === 60 ? 1 : 0); return `${h % 24}:${String(m % 60).padStart(2, '0')}ごろ`; }
+function wxLines(pts) {
+  const out = [], seen = {};
+  pts.forEach(x => {
+    const k = wxKind(x.w); if (!k || seen[k]) return; seen[k] = 1;
+    const amt = k === 'rain' ? `（1時間に${Math.max(0.5, Math.round(x.w.pr * 10) / 10)}mm）` : '';
+    out.push({ic: k === 'snow' ? '❄' : '☔', text: x.last ? `${wxWhere(x)}は、着くころ${k === 'snow' ? '雪' : '雨'}の予報${amt}` : `${wxTime(x.at)}、${wxWhere(x)}で${k === 'snow' ? '雪' : '雨'}${amt}`});
+  });
+  const cold = pts.find(x => x.w && x.w.t !== null && x.w.t <= 1);
+  if (cold) out.push({ic: '🧊', text: `${wxTime(cold.at)}、${wxWhere(cold)}は気温${Math.round(cold.w.t)}℃。路面の凍結に注意`});
+  if (!out.length) out.push({ic: '☀', text: '道中・行き先とも、雨や雪の予報はありません'});
+  return out;
+}
+function wxSay(pts) {
+  const x = pts.find(y => wxKind(y.w)), cold = pts.find(y => y.w && y.w.t !== null && y.w.t <= 1);
+  if (x) { const k = wxKind(x.w) === 'snow' ? '雪' : '雨'; return x.last ? `行き先は、着くころ${k}の予報です` : x.a < 1000 ? `出発地あたりで${k}の予報です` : `この先、${Math.round(x.a / 1000)}キロ先あたりで${k}の予報です`; }
+  if (cold) return '気温が低く、路面の凍結に注意してください';
+  return '';
+}
+// 日の入り（行き先、着く日の）。太陽の高さが −0.83° を下回る時刻を12時〜22時の間で探す（通信なし）
+function sunsetAt(p, day) {
+  let lo = new Date(day), hi = new Date(day);
+  lo.setHours(12, 0, 0, 0); hi.setHours(22, 0, 0, 0);
+  if (sunAlt(p[0], p[1], lo) < -0.83 || sunAlt(p[0], p[1], hi) > -0.83) return null;
+  for (let i = 0; i < 30; i++) { const m = new Date((lo.getTime() + hi.getTime()) / 2); if (sunAlt(p[0], p[1], m) > -0.83) lo = m; else hi = m; }
+  return hi;
+}
+function sunInfo(c) {
+  const p = c.coords[c.coords.length - 1], arr = new Date(Date.now() + c.r.duration * 1000);
+  const ss = sunsetAt(p, arr); if (!ss) return null;
+  const tm = d => d.toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}), diff = (ss - arr) / 60000;
+  const morning = sunAlt(p[0], p[1], arr) <= -0.83 && arr.getHours() < 12;
+  if (morning) return {ic: '🌙', text: `着くころはまだ暗い時間です（日の入り ${tm(ss)}）`, small: false};
+  if (diff < 0) return {ic: '🌙', text: `着くころは暗くなっています（日の入り ${tm(ss)}）`, small: false};
+  if (diff <= 120) return {ic: '🌇', text: `日の入り ${tm(ss)}。着いてから約${diff < 60 ? Math.max(10, Math.round(diff / 10) * 10) + '分' : Math.round(diff / 60) + '時間'}で暗くなります`, small: false};
+  return {ic: '🌇', text: `日の入り ${tm(ss)}（行き先）`, small: true};
+}
+function wxHtml() {
+  if (!preview) return '';
+  const k = wxKey(preview);
+  if (!wxCache || wxCache.key !== k) return '';
+  let h = '';
+  if (wxCache.state === 'calc') h += '<div class="small">道中の天気を調べています…</div>';
+  else if (wxCache.state === 'ok') h += wxCache.lines.map(l => `<div class="wxL">${l.ic} ${esc(l.text)}</div>`).join('');
+  const s = wxCache.sun;
+  if (s) h += `<div class="${s.small ? 'small' : 'wxL'}">${s.ic} ${esc(s.text)}</div>`;
+  return h ? `<div class="wxBox">${h}</div>` : '';
+}
+// ナビを始めたときに1回だけ（雨・雪・凍結の予報があるとき）
+function wxStartSay() {
+  if (!wxCache || wxCache.state !== 'ok' || !wxCache.say || !preview || wxCache.key !== wxKey(preview)) return '';
+  return wxCache.say;
 }
 
 // ---------- 起動 ----------
