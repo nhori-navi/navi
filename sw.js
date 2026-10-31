@@ -3,7 +3,7 @@
 // ・自分のファイル（index.html・js・css・アイコン）は毎回ネットから取り、取れたら控えを残す
 //   → 更新はすぐ反映される。通信できないときだけ控えを使う
 // ・地図・渋滞・経路（Mapbox）や OpenStreetMap には手を出さない
-const CACHE = 'komumiru-v1';
+const CACHE = 'komumiru-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil((async () => {
@@ -16,6 +16,7 @@ self.addEventListener('fetch', e => {
   const req = e.request, url = new URL(req.url);
   const base = new URL('./', self.registration.scope);
   if (req.method !== 'GET' || url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) return;
+  if (url.searchParams.has('chk')) return; // 版9：新しい版の確かめは、いつもネットへ（控えない）
   e.respondWith((async () => {
     try {
       const res = await fetch(req, {cache: 'no-cache'});
@@ -28,7 +29,7 @@ self.addEventListener('fetch', e => {
       if (req.mode === 'navigate') return new Response(
         '<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         + '<title>KomuMiru</title><body style="font-family:sans-serif;padding:24px;line-height:1.7">'
-        + '<h2 style="color:#1f3a93">KomuMiru</h2>接続できません。<br>地図・渋滞・経路の計算には通信が必要です。通信できる場所で開き直してください。</body>',
+        + '<h2 style="color:#a9502b">KomuMiru</h2>接続できません。<br>地図・渋滞・経路の計算には通信が必要です。通信できる場所で開き直してください。</body>',
         {headers: {'Content-Type': 'text/html; charset=utf-8'}});
       throw err;
     }

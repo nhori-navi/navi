@@ -5,7 +5,8 @@
 // ・ナビの再開（30分以内に開き直したら続けるか聞く）
 // ・版の表示と古いファイルの知らせ
 // （版6）下のタブと真ん中の丸い▶、境目のつまみ、押して選ぶ並び、ホーム画面に追加
-(window.KOMU_FV = window.KOMU_FV || {}).ui = 7;
+// （版9）比べ方の設定の保存、新しい版の知らせ、色をテラコッタ系に（地図のルートの線は渋滞の赤と見分けるため紺のまま）
+(window.KOMU_FV = window.KOMU_FV || {}).ui = 9;
 
 function lsGetStr(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
 function lsSetStr(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
@@ -149,7 +150,7 @@ function applyTheme() {
   const s = themeState();
   document.body.classList.toggle('dark', s.dark);
   routeStyle(s.dark);
-  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = s.dark ? '#121821' : '#1f3a93';
+  const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = s.dark ? '#161413' : '#a9502b';
   if (s.preset !== themePreset && map && typeof map.setConfigProperty === 'function') {
     try { map.setConfigProperty('basemap', 'lightPreset', s.preset); themePreset = s.preset; } catch (e) {}
   }
@@ -203,6 +204,51 @@ function checkVersion() {
     $('verWarn').textContent = '⚠ ファイルの版が合いません：' + bad.join('、') + '。GitHub のファイルを置き直すか、10分ほど待ってから開き直してください。';
     $('verWarn').style.display = 'block';
   }
+}
+
+// ---------- 版9：比べ方の設定を保存する ----------
+// 提案する差・確認間隔・遠回り・心的負担の重みを navi_cmp に {thr, interval, wkm, bdw} で覚え、開いたときに戻す。
+// 選べない値（古い保存など）は無視して既定値のまま。押して選ぶ並び（chips）は1秒ごとに select に合わせて動く
+const CMP_KEY = 'navi_cmp', CMP_IDS = ['thr', 'interval', 'wkm', 'bdw'];
+function initSettingsSave() {
+  let saved = {};
+  try { saved = JSON.parse(lsGetStr(CMP_KEY, '{}')) || {}; } catch (e) { saved = {}; }
+  CMP_IDS.forEach(id => {
+    const sel = $(id); if (!sel) return;
+    const v = saved[id];
+    if (v !== undefined && [...sel.options].some(o => o.value === String(v))) sel.value = String(v);
+    sel.addEventListener('change', () => {
+      const o = {}; CMP_IDS.forEach(k => { if ($(k)) o[k] = $(k).value; });
+      lsSetStr(CMP_KEY, JSON.stringify(o));
+    });
+  });
+  if (typeof syncChips === 'function') syncChips();
+}
+
+// ---------- 版9：新しい版の知らせ ----------
+// 開いて8秒後と、30分以上たってから画面に戻ったとき、GitHub の index.html の KOMU_V を見る。
+// 今より新しければパネルの上に「🆕 新しい版（版n）があります［開き直す］」。ナビ中は CSS で隠し、止めたら出る
+let updLast = 0;
+async function checkUpdate() {
+  if (!/^https?:/.test(location.protocol) || !navigator.onLine) return;
+  updLast = Date.now();
+  try {
+    const res = await fetch('index.html?chk=' + Date.now(), {cache: 'no-store'});
+    if (!res.ok) return;
+    const m = (await res.text()).match(/KOMU_V\s*=\s*([\d.]+)/);
+    const v = m ? Number(m[1]) : 0;
+    if (v > Number(window.KOMU_V || 0)) {
+      $('updText').textContent = `🆕 新しい版（版${v}）があります`;
+      document.body.classList.add('upd');
+    }
+  } catch (e) { /* 電波がないときは調べない */ }
+}
+function initUpdate() {
+  $('updGo').onclick = () => location.reload();
+  setTimeout(checkUpdate, 8000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() - updLast > 30 * 60000) checkUpdate();
+  });
 }
 
 // ---------- 下のタブ ----------
@@ -358,6 +404,8 @@ function initUi() {
   initTheme();
   initResume();
   checkVersion();
+  initSettingsSave();
+  initUpdate();
   $('stop').onclick = stopPress;
   readShareLink(); // 共有リンクから開いたとき
 }

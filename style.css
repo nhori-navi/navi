@@ -5,7 +5,7 @@ button,select,input{font-size:15px;padding:6px 10px;margin:3px 3px 3px 0}
 #search{width:55%}
 #next{font-size:21px;font-weight:bold;margin:2px 0}
 #summary{font-size:16px;margin:2px 0}
-#exitInfo{font-size:15px;color:#1f3a93;font-weight:bold;margin:2px 0 4px}
+#exitInfo{font-size:15px;color:#a9502b;font-weight:bold;margin:2px 0 4px}
 #hwy{display:none;background:#fff;border:2px solid #2e7d32;border-radius:8px;padding:4px 8px;margin:6px 0}
 .fac{display:flex;align-items:baseline;gap:6px;padding:3px 0;border-bottom:1px solid #eee;font-size:15px}
 .fac:last-child{border-bottom:none}
@@ -15,10 +15,13 @@ button,select,input{font-size:15px;padding:6px 10px;margin:3px 3px 3px 0}
 .jam{color:#c0392b;font-size:12px;padding:0 0 2px 40px}
 /* 名前と使い方ナビ */
 #top{display:flex;align-items:center;gap:6px;margin:0 0 4px}
-#appName{font-weight:bold;font-size:18px;color:#1f3a93;letter-spacing:.5px}
-.helpSw{margin-left:auto;display:inline-flex;align-items:center;gap:5px;border:1px solid #1f3a93;border-radius:16px;padding:4px 12px;font-size:14px;color:#1f3a93;background:#fff;cursor:pointer;user-select:none}
-.helpSw input{margin:0;width:18px;height:18px;padding:0}
-body.help .helpSw{background:#1f3a93;color:#fff}
+#appName{font-weight:bold;font-size:18px;color:#a9502b;letter-spacing:.5px}
+.helpSw{margin-left:auto;display:inline-flex;align-items:center;gap:8px;min-height:40px;font-size:14px;font-weight:bold;color:#a9502b;cursor:pointer;user-select:none}
+/* 版9：入切は MichiMiru などと同じ横長のスイッチ */
+.helpSw input{appearance:none;-webkit-appearance:none;flex:none;width:46px;height:28px;margin:0;padding:0;border:none;border-radius:14px;background:#d9cfc9;position:relative;transition:background .15s;cursor:pointer}
+.helpSw input::before{content:'';position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:left .15s}
+.helpSw input:checked{background:#a9502b}
+.helpSw input:checked::before{left:21px}
 #tip{display:none;position:sticky;top:0;z-index:5;background:#fffbe6;border:2px solid #f0b400;border-radius:8px;padding:8px 34px 8px 10px;margin:4px 0 6px;font-size:15px;line-height:1.6;box-shadow:0 2px 6px rgba(0,0,0,.15)}
 #tipWarn{color:#b03a2e;font-size:13px;margin-top:4px}
 #tipWarn:empty{display:none}
@@ -28,10 +31,10 @@ body.help .helpSw{background:#1f3a93;color:#fff}
 @keyframes hlp{50%{outline-color:rgba(240,180,0,.2)}}
 .q{display:inline-block;border:1px solid #c9b46a;background:#fffbe6;color:#8a6d00;border-radius:50%;width:24px;height:24px;padding:0;margin:0 0 0 4px;font-size:13px;font-weight:bold;line-height:24px;text-align:center;vertical-align:middle}
 #banner{display:none;background:#fff3cd;border:2px solid #e0a800;border-radius:8px;padding:8px;margin:6px 0;font-size:16px}
-#verdict{background:#e8f0fe;border:2px solid #1f3a93;border-radius:8px;padding:8px;margin:6px 0;font-size:16px;font-weight:bold}
-#judgeBtn{background:#1f3a93;color:#fff;border:none;border-radius:6px}
+#verdict{background:#fbeee6;border:2px solid #a9502b;border-radius:8px;padding:8px;margin:6px 0;font-size:16px;font-weight:bold}
+#judgeBtn{background:#a9502b;color:#fff;border:none;border-radius:6px}
 .card{border:1px solid #ccc;border-radius:6px;padding:6px 8px;margin:6px 0;background:#fff;line-height:1.6}
-.cur{border:2px solid #1f3a93}
+.cur{border:2px solid #a9502b}
 .inc{color:#8e44ad}
 .small{color:#777;font-size:12px}
 .hit{padding:8px;border-bottom:1px solid #ddd;cursor:pointer;background:#fff}
@@ -44,17 +47,17 @@ details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;pad
 #tabbar{position:fixed;left:0;right:0;bottom:0;height:var(--tabH);padding-bottom:env(safe-area-inset-bottom);display:flex;align-items:stretch;background:#fff;border-top:1px solid #ccc;z-index:5}
 .tb{flex:1;border:none;background:none;margin:0;padding:4px 0;font-size:12px;color:#555;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .tb span{font-size:20px;line-height:1}
-.tb.on{color:#1f3a93;font-weight:bold;box-shadow:inset 0 3px 0 #1f3a93}
-#navFab{flex:none;width:72px;height:72px;margin:-18px 6px 0;border-radius:50%;background:#1f3a93;color:#fff;border:4px solid #fafafa;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;gap:1px}
+.tb.on{color:#a9502b;font-weight:bold;box-shadow:inset 0 3px 0 #a9502b}
+#navFab{flex:none;width:72px;height:72px;margin:-18px 6px 0;border-radius:50%;background:#a9502b;color:#fff;border:4px solid #fafafa;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0;gap:1px}
 #navFab b{font-size:24px;line-height:1}
 #navFab small{font-size:10px}
-#navFab:disabled{background:#9aa4b5}
+#navFab:disabled{background:#b0a69f}
 .pane{display:none}
 .pane.open{display:block}
 /* 境目のつまみ（縦向きのスマホだけ） */
 #grip{position:fixed;top:calc(var(--split) - 15px);left:50%;transform:translateX(-50%);width:120px;height:30px;z-index:6;touch-action:none;display:flex;align-items:center;justify-content:center;cursor:ns-resize}
-#grip span{width:46px;height:6px;border-radius:3px;background:#8a94a6;box-shadow:0 0 0 2px rgba(255,255,255,.8)}
-#grip.drag span{background:#1f3a93}
+#grip span{width:46px;height:6px;border-radius:3px;background:#9a908a;box-shadow:0 0 0 2px rgba(255,255,255,.8)}
+#grip.drag span{background:#a9502b}
 @media (min-width:900px){
   #map{height:auto !important;bottom:0;right:400px}
   #panel{top:0 !important;left:auto;width:400px;border-top:none;border-left:1px solid #ccc;padding-top:8px}
@@ -62,18 +65,18 @@ details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;pad
   #grip{display:none}
 }
 /* ===== 部品 ===== */
-.primary{background:#1f3a93;color:#fff;border:1px solid #1f3a93;border-radius:6px}
+.primary{background:#a9502b;color:#fff;border:1px solid #a9502b;border-radius:6px}
 #panel button:not(.q):not(.x):not(.chip){min-height:40px;border-radius:6px}
 #start{display:none !important}
 .card{border-radius:10px}
-.cardH{font-weight:bold;margin:0 0 6px;color:#1f3a93}
+.cardH{font-weight:bold;margin:0 0 6px;color:#a9502b}
 .setRow{margin:10px 0}
 .lbl{font-size:13px;color:#444;margin-bottom:4px}
 .hid{display:none !important}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{border:1px solid #1f3a93;background:#fff;color:#1f3a93;border-radius:18px;padding:6px 14px;margin:0;min-height:38px;font-size:14px}
-.chip.on{background:#1f3a93;color:#fff}
-#routeCard{display:none;border:2px solid #1f3a93}
+.chip{border:1px solid #a9502b;background:#fff;color:#a9502b;border-radius:18px;padding:6px 14px;margin:0;min-height:38px;font-size:14px}
+.chip.on{background:#a9502b;color:#fff}
+#routeCard{display:none;border:2px solid #a9502b}
 #routeCard.show{display:block}
 .rcMain{font-size:18px;margin:4px 0}
 .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
@@ -84,7 +87,7 @@ details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;pad
 #resume{display:none;background:#fff3cd;border:2px solid #e0a800;border-radius:8px;padding:8px;margin:4px 0 6px;font-size:15px}
 #resume button{min-width:90px}
 /* 走行中の大きな案内（ナビ中だけ出す） */
-#drive{display:none;align-items:center;gap:10px;background:#1f3a93;color:#fff;border-radius:10px;padding:6px 12px;margin:2px 0 6px}
+#drive{display:none;align-items:center;gap:10px;background:#3d2b23;color:#fff;border-radius:10px;padding:6px 12px;margin:2px 0 6px}
 #drive.near{background:#c0392b}
 #dArrow{flex:none;width:56px;height:56px;display:flex;align-items:center;justify-content:center}
 #dArrow svg{width:56px;height:56px}
@@ -107,8 +110,8 @@ body.driving:not(.more) #panel{bottom:0}
 body.driving #navFab{background:#555}
 /* 地図の右の丸ボタン（◎追従・向き） */
 #mapBtns{position:absolute;right:10px;bottom:40px;z-index:3;display:flex;flex-direction:column;gap:10px}
-.mb{width:48px;height:48px;border-radius:50%;border:none;background:#fff;color:#1f3a93;font-size:15px;font-weight:bold;box-shadow:0 1px 5px rgba(0,0,0,.35);margin:0;padding:0}
-.mb.on{background:#1f3a93;color:#fff}
+.mb{width:48px;height:48px;border-radius:50%;border:none;background:#fff;color:#a9502b;font-size:15px;font-weight:bold;box-shadow:0 1px 5px rgba(0,0,0,.35);margin:0;padding:0}
+.mb.on{background:#a9502b;color:#fff}
 #mFollow{font-size:22px}
 /* スマホの横向き（高さ520px以下）：地図を左、パネルとタブを右。ナビ中は地図いっぱい＋右下の小さな箱 */
 @media (orientation:landscape) and (max-height:520px){
@@ -126,73 +129,74 @@ body.driving #navFab{background:#555}
   #dDist{font-size:26px}
 }
 /* 夜間モード（body.dark） */
-body.dark{background:#121821;color:#e6e9ef}
-body.dark #panel{background:#161d28;border-color:#2c3646}
-body.dark #tabbar{background:#161d28;border-color:#2c3646}
-body.dark .tb{color:#9aa4b5}
-body.dark .tb.on{color:#8fb0ff;box-shadow:inset 0 3px 0 #8fb0ff}
-body.dark #navFab{border-color:#161d28;background:#3157c9}
-body.dark #navFab:disabled{background:#3a4458;color:#8a94a6}
-body.dark button, body.dark select, body.dark input, body.dark textarea{background:#253045;color:#e6e9ef;border:1px solid #3a4760;border-radius:4px}
-body.dark button:disabled{color:#6b7488}
-body.dark #judgeBtn, body.dark .primary{background:#3157c9;border-color:#3157c9;color:#fff}
-body.dark .chip{background:#1e2633;color:#8fb0ff;border-color:#5b78c9;border-radius:18px}
-body.dark .chip.on{background:#3157c9;color:#fff;border-color:#3157c9}
+body.dark{background:#161413;color:#e6e9ef}
+body.dark #panel{background:#1d1a18;border-color:#3a3330}
+body.dark #tabbar{background:#1d1a18;border-color:#3a3330}
+body.dark .tb{color:#b0a69f}
+body.dark .tb.on{color:#f0a27e;box-shadow:inset 0 3px 0 #f0a27e}
+body.dark #navFab{border-color:#1d1a18;background:#b85a33}
+body.dark #navFab:disabled{background:#4a413c;color:#9a908a}
+body.dark button, body.dark select, body.dark input, body.dark textarea{background:#2e2926;color:#e6e9ef;border:1px solid #4a413c;border-radius:4px}
+body.dark button:disabled{color:#7d736d}
+body.dark #judgeBtn, body.dark .primary{background:#b85a33;border-color:#b85a33;color:#fff}
+body.dark .chip{background:#262220;color:#f0a27e;border-color:#c27552;border-radius:18px}
+body.dark .chip.on{background:#b85a33;color:#fff;border-color:#b85a33}
 body.dark #stop.arm{background:#c0392b;border-color:#c0392b;color:#fff}
-body.dark .card, body.dark details, body.dark #hwy, body.dark .hit{background:#1e2633;border-color:#33405a;color:#e6e9ef}
-body.dark #routeCard{border-color:#6f8fe6}
-body.dark .cardH{color:#8fb0ff}
-body.dark .lbl{color:#b8c1d1}
+body.dark .card, body.dark details, body.dark #hwy, body.dark .hit{background:#262220;border-color:#443b36;color:#e6e9ef}
+body.dark #routeCard{border-color:#d98a64}
+body.dark .cardH{color:#f0a27e}
+body.dark .lbl{color:#c9bfb8}
 body.dark #hwy{border-color:#3f8f47}
-body.dark .cur{border-color:#6f8fe6}
-body.dark #verdict{background:#1b2a4a;border-color:#6f8fe6;color:#e6e9ef}
+body.dark .cur{border-color:#d98a64}
+body.dark #verdict{background:#3a2418;border-color:#d98a64;color:#e6e9ef}
 body.dark #banner, body.dark #resume, body.dark #tip{background:#3b3010;border-color:#c9a227;color:#fff1c2}
 body.dark #tip .x{color:#f0d77a}
-body.dark .small{color:#9aa4b5}
-body.dark #exitInfo, body.dark #appName{color:#8fb0ff}
+body.dark .small{color:#b0a69f}
+body.dark #exitInfo, body.dark #appName{color:#f0a27e}
 body.dark .inc{color:#d2a8e6}
 body.dark .jam{color:#ff8a7a}
-body.dark .fac{border-color:#2c3646}
-body.dark .helpSw{background:#253045;color:#8fb0ff;border-color:#8fb0ff}
-body.dark.help .helpSw{background:#3157c9;color:#fff}
+body.dark .fac{border-color:#3a3330}
+body.dark .helpSw{color:#f0a27e}
+body.dark .helpSw input{background:#4a413c;border:none;border-radius:14px}
+body.dark .helpSw input:checked{background:#b85a33}
 body.dark .q{background:#3b3010;color:#f0d77a;border-color:#c9a227;border-radius:50%}
-body.dark .mb{background:#253045;color:#cfd8ea;border:none;border-radius:50%}
-body.dark .mb.on{background:#3157c9;color:#fff}
-body.dark #drive{background:#22346e}
+body.dark .mb{background:#2e2926;color:#eadfd8;border:none;border-radius:50%}
+body.dark .mb.on{background:#b85a33;color:#fff}
+body.dark #drive{background:#2e2926;box-shadow:inset 0 0 0 1px #4a413c}
 body.dark #drive.near{background:#c0392b}
 body.dark #err{color:#ff8a7a !important}
-body.dark #grip span{background:#8fb0ff;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
+body.dark #grip span{background:#f0a27e;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
 body.dark .tb{background:none;border:none;border-radius:0}
-body.dark #navFab{border:4px solid #161d28;border-radius:50%}
+body.dark #navFab{border:4px solid #1d1a18;border-radius:50%}
 .acts button{white-space:nowrap}
 /* ===== 版7：経由地・お気に入り・出発地・長押し・ICの比較 ===== */
 .viaList{margin:4px 0;font-size:14px}
-.viaTag{display:inline-flex;align-items:center;gap:2px;background:#eef2fb;border:1px solid #c5d0ea;border-radius:14px;padding:1px 2px 1px 8px;margin:2px 4px 2px 0}
+.viaTag{display:inline-flex;align-items:center;gap:2px;background:#f8ede6;border:1px solid #ecc9b6;border-radius:14px;padding:1px 2px 1px 8px;margin:2px 4px 2px 0}
 .viaTag .viaRm{border:none;background:none;min-height:0 !important;padding:2px 6px;margin:0;color:#c0392b;font-size:14px}
 .viaMk{width:26px;height:26px;border-radius:50%;background:#8e44ad;color:#fff;font-weight:bold;font-size:16px;line-height:26px;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)}
 .acts2 button{font-size:14px}
 .rough{background:#fff3cd;border:1px solid #e0a800;border-radius:8px;padding:6px 8px;margin:6px 0;font-size:14px}
 .favRow{display:flex;gap:6px;margin:4px 0}
-.favRow .favGo{flex:1;text-align:left;background:#fff;border:1px solid #c5d0ea;color:#1f3a93;font-weight:bold}
+.favRow .favGo{flex:1;text-align:left;background:#fff;border:1px solid #ecc9b6;color:#a9502b;font-weight:bold}
 .favRow .favDel{flex:none;font-size:13px}
 #originText{font-weight:bold;margin:2px 0}
-.icCmp{margin-top:8px;border-top:1px dashed #c5d0ea;padding-top:6px}
+.icCmp{margin-top:8px;border-top:1px dashed #ecc9b6;padding-top:6px}
 .icRow{border:1px solid #ddd;border-radius:8px;padding:6px 8px;margin:6px 0;background:#fff;line-height:1.6}
-.icRow.same{border:2px solid #1f3a93}
+.icRow.same{border:2px solid #a9502b}
 .icRow button{font-size:14px}
 #pickModal{display:none;position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.35);align-items:flex-end;justify-content:center}
 .pmBox{background:#fff;width:100%;max-width:420px;border-radius:14px 14px 0 0;padding:12px 14px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
 .pmBox button{min-height:48px;font-size:16px;border-radius:8px;margin:0}
-body.dark .viaTag{background:#1e2633;border-color:#3a4760}
+body.dark .viaTag{background:#262220;border-color:#4a413c}
 body.dark .rough{background:#3b3010;border-color:#c9a227;color:#fff1c2}
-body.dark .favRow .favGo{background:#1e2633;color:#8fb0ff;border-color:#3a4760}
-body.dark .icRow{background:#1e2633;border-color:#33405a}
-body.dark .icRow.same{border-color:#6f8fe6}
-body.dark .pmBox{background:#161d28;color:#e6e9ef}
+body.dark .favRow .favGo{background:#262220;color:#f0a27e;border-color:#4a413c}
+body.dark .icRow{background:#262220;border-color:#443b36}
+body.dark .icRow.same{border-color:#d98a64}
+body.dark .pmBox{background:#1d1a18;color:#e6e9ef}
 /* ===== 版8：紹介・ヘルプ ===== */
 body.driving:not(.more) .q{display:none}
 #intro{display:none;position:fixed;inset:0;z-index:30;background:rgba(10,20,50,.55);align-items:center;justify-content:center;padding:16px}
-.inBox{width:100%;max-width:400px;border-radius:18px;padding:26px 22px 16px;color:#fff;text-align:center;background:linear-gradient(160deg,#2b4fb5 0%,#1f3a93 55%,#152a6b 100%);box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.inBox{width:100%;max-width:400px;border-radius:18px;padding:26px 22px 16px;color:#fff;text-align:center;background:linear-gradient(160deg,#d27a50 0%,#a9502b 55%,#86391c 100%);box-shadow:0 8px 30px rgba(0,0,0,.4)}
 #inEmoji{font-size:56px;line-height:1.2}
 #inTitle{font-size:21px;font-weight:bold;margin:8px 0 10px}
 #inText{font-size:15px;line-height:1.7;text-align:left;min-height:7.5em}
@@ -201,22 +205,30 @@ body.driving:not(.more) .q{display:none}
 #inDots span.on{background:#fff}
 .inBtns{display:flex;gap:10px}
 .inBtns button{flex:1;min-height:46px;border-radius:10px;border:1px solid rgba(255,255,255,.6);background:transparent;color:#fff;font-size:16px;margin:0}
-.inBtns .inMain{background:#fff;color:#1f3a93;font-weight:bold;border-color:#fff}
+.inBtns .inMain{background:#fff;color:#a9502b;font-weight:bold;border-color:#fff}
 #inSkip{margin-top:10px;background:none;border:none;color:rgba(255,255,255,.8);text-decoration:underline;font-size:14px}
 #helpBox{display:none;position:fixed;inset:0;z-index:25;background:#fafafa;flex-direction:column}
-.hHead{display:flex;align-items:center;justify-content:space-between;padding:10px 12px calc(10px) 14px;border-bottom:1px solid #ccc;background:#fff;font-size:18px;color:#1f3a93}
+.hHead{display:flex;align-items:center;justify-content:space-between;padding:10px 12px calc(10px) 14px;border-bottom:1px solid #ccc;background:#fff;font-size:18px;color:#a9502b}
 .hHead button{min-height:40px;border-radius:8px;margin:0}
 #helpScroll{flex:1;overflow:auto;padding:8px 12px calc(16px + env(safe-area-inset-bottom));max-width:720px;width:100%;margin:0 auto}
 .hsec{background:#fff;border:1px solid #ddd;border-radius:10px;margin:8px 0;padding:0;scroll-margin-top:8px}
-.hsec summary{padding:12px 14px;font-weight:bold;color:#1f3a93;cursor:pointer}
+.hsec summary{padding:12px 14px;font-weight:bold;color:#a9502b;cursor:pointer}
 .htext{padding:0 14px 12px;line-height:1.8;font-size:15px}
 .hFoot{display:flex;flex-direction:column;gap:8px;margin-top:14px}
 .hFoot button{min-height:46px;border-radius:8px;margin:0}
-body.dark #helpBox{background:#121821}
-body.dark .hHead{background:#161d28;border-color:#2c3646;color:#8fb0ff}
-body.dark .hsec{background:#1e2633;border-color:#33405a}
-body.dark .hsec summary{color:#8fb0ff}
+body.dark #helpBox{background:#161413}
+body.dark .hHead{background:#1d1a18;border-color:#3a3330;color:#f0a27e}
+body.dark .hsec{background:#262220;border-color:#443b36}
+body.dark .hsec summary{color:#f0a27e}
 body.dark .q{background:#3b3010;color:#f0d77a;border-color:#8a7430}
 /* ナビ中の吹き出しは、案内を隠さないよう地図の下の端に浮かせる */
 @media (max-width:899px){ body.driving #tip{position:fixed;top:auto;bottom:calc(100% - var(--splitD) + 12px);left:10px;right:70px;z-index:7;margin:0} }
 @media (orientation:landscape) and (max-height:520px){ body.driving #tip{position:fixed;z-index:7;margin:0;top:10px;bottom:auto;left:calc(10px + env(safe-area-inset-left));right:auto;width:min(420px, calc(100% - 380px))} }
+/* 版9：シリーズのTOPへ・新しい版の知らせ */
+#seriesLink{display:block;margin:10px 0 2px;padding:10px 0;text-align:center;color:#a9502b;font-weight:bold;text-decoration:none;border-top:1px solid #eee}
+body.dark #seriesLink{color:#f0a27e;border-color:#3a3330}
+#updNote{display:none;align-items:center;gap:8px;background:#fbeee6;border:1px solid #ecc9b6;border-radius:8px;padding:6px 8px 6px 12px;margin:2px 0 6px;font-size:14px;color:#6e3218}
+#updNote span{flex:1}
+#updNote button{margin:0;min-height:36px;padding:4px 14px}
+body.upd:not(.driving) #updNote{display:flex}
+body.dark #updNote{background:#3a2418;border-color:#6e3218;color:#f6d9c8}
