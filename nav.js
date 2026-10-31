@@ -1,5 +1,5 @@
 // KomuMiru：目的地・出口の登録・現在地・走行中の案内・開始と停止
-(window.KOMU_FV = window.KOMU_FV || {}).nav = 7;
+(window.KOMU_FV = window.KOMU_FV || {}).nav = 10;
 
 // ---------- 目的地 ----------
 $('pickBtn').onclick = () => { pickMode = true; icPick = false; $('guide').textContent = '地図上の目的地をタップしてください。'; };
@@ -82,6 +82,7 @@ async function previewRoute() {
 // ルート全体が見えるように地図を寄せる
 function fitRoute(c) {
   if (!map || typeof map.fitBounds !== 'function') return;
+  if (document.body.classList.contains('sum')) return; // 版10：まとめのカードで走った道を見ている間は動かさない
   let x0 = 180, y0 = 90, x1 = -180, y1 = -90;
   c.coords.forEach(p => { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
   try { map.fitBounds([[x0, y0], [x1, y1]], {padding: 50, duration: 800, bearing: 0, pitch: 0}); } catch (e) {}
@@ -335,6 +336,7 @@ function onPos(p) {
     if (!dest) $('guide').textContent = '目的地を検索するか、「地図で指定」を押して地図をタップしてください。';
   } else posMarker.setLngLat(pos);
   if (navOn && follow) followCam();
+  if (navOn && typeof recPoint === 'function') recPoint(p.coords); // 版10：走った記録
   if (navOn && active) guide();
 }
 
@@ -407,7 +409,9 @@ async function startNav(opts) {
   entryPending = !viaEntry; entryRetry = 0; clearTimeout(entryRetryTimer);
   previewSeq++; arrived = false; icCmp = null; renderCard(); clearOrigin(true); // ナビはいつも現在地から
   $('start').disabled = true; $('stop').disabled = false; $('judgeOut').innerHTML = '';
+  if (typeof hideSummary === 'function' && document.body.classList.contains('sum')) hideSummary();
   setDriving(true); setFollow(true);
+  if (typeof recStart === 'function') recStart({resume: !!opts.resume}); // 版10：走った記録
   speak(opts.resume ? 'ナビを再開します' : 'ナビを開始します'); keepAwake();
   followCam({zoom: 15});
   active = null; await compare(); restartTimer(); saveSession();
@@ -422,4 +426,5 @@ function stopNav() {
   clearSession(); setDriving(false); camReset();
   // 結果のカードに戻す：到着したら「到着しました」、途中で止めたら今の場所からのルートを計算し直す
   if (dest) { if (arrived) renderCard('arrived'); else previewRoute(); }
+  if (typeof recFinish === 'function') recFinish(arrived); // 版10：記録を残して、まとめのカード
 }

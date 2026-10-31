@@ -1,5 +1,5 @@
 // KomuMiru：経路の取得・定期比較・判定
-(window.KOMU_FV = window.KOMU_FV || {}).route = 7;
+(window.KOMU_FV = window.KOMU_FV || {}).route = 10;
 
 // ---------- 経路取得 ----------
 // list の最後が目的地なら、その前に残りの経由地を自動で入れる（経由地は「止まる所」、
@@ -132,10 +132,11 @@ function checkProposal(best) {
   $('banner').style.display = 'block';
   setData('prop', [{type:'Feature', properties:{}, geometry:best.r.geometry}]);
   const key = 'p' + best.name + tg;
-  if (!spoken.has(key)) { spoken.add(key); speak(`より早いルートがあります。${best.name}で、約${tg}分早く着きます`); }
+  if (!spoken.has(key)) { spoken.add(key); if (typeof recCount === 'function') recCount('prop'); speak(`より早いルートがあります。${best.name}で、約${tg}分早く着きます`); }
 }
 $('switchBtn').onclick = () => {
   if (!proposal) return;
+  if (typeof recSwitch === 'function') recSwitch(Math.round((remDur(active) - remDur(proposal)) / 60)); // 版10
   viaEntry = null; setActive(proposal); hideBanner(); speak('ルートを切り替えました');
   $('cands').innerHTML = '<div class="small">切り替えました。次回の確認で一覧を更新します。</div>';
 };
@@ -277,10 +278,11 @@ function decide(cands, auto, note, curEntry) {
   if (!cands.length) h += '<div class="small">比べられる候補が見つかりませんでした</div>';
   $('judgeOut').innerHTML = h;
   $('judgeOut').querySelectorAll('button[data-c]').forEach(b => b.onclick = () => {
+    if (typeof recSwitch === 'function') recSwitch(Math.round(cands[Number(b.dataset.c)].tGain)); // 版10
     viaEntry = null; cands[Number(b.dataset.c)].act(); hideBanner(); speak('ルートを切り替えました');
     $('judgeOut').innerHTML = '<div class="small">切り替えました</div>';
   });
   if (!auto || recommend) speak(say);
 }
-$('judgeBtn').onclick = () => judge(false, true);
+$('judgeBtn').onclick = () => { if (typeof recCount === 'function') recCount('judge'); judge(false, true); };
 

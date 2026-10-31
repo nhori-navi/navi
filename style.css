@@ -232,3 +232,48 @@ body.dark #seriesLink{color:#f0a27e;border-color:#3a3330}
 #updNote button{margin:0;min-height:36px;padding:4px 14px}
 body.upd:not(.driving) #updNote{display:flex}
 body.dark #updNote{background:#3a2418;border-color:#6e3218;color:#f6d9c8}
+/* 版10：着いたときのまとめ（パネルの場所に重ねて、地図には走った道を描く） */
+#sumCard{display:none;position:fixed;z-index:12;top:var(--split);bottom:var(--tabH);left:0;right:0;overflow-y:auto;background:#fff;border-top:3px solid #a9502b;padding:10px 14px 12px;box-shadow:0 -4px 14px rgba(0,0,0,.2);line-height:1.5;font-size:15px}
+body.sum #sumCard{display:block}
+@media (min-width:900px){#sumCard{top:0;left:auto;width:400px;border-top:none;border-left:3px solid #a9502b}}
+@media (orientation:landscape) and (max-height:520px){#sumCard{top:0;left:auto;width:calc(340px + env(safe-area-inset-right));padding-right:calc(14px + env(safe-area-inset-right));border-top:none;border-left:3px solid #a9502b}}
+#sumCard .sHead{display:flex;align-items:center;justify-content:space-between;color:#a9502b;font-size:17px}
+#sumCard .x{border:none;background:none;font-size:24px;line-height:1;padding:2px 6px;margin:0;color:#888}
+#sumCard .sRoute{font-weight:bold;margin:2px 0 6px}
+.sNums{display:flex;gap:6px;margin:4px 0 8px}
+.sNums div{flex:1;text-align:center;background:#f8ede6;border-radius:10px;padding:6px 2px}
+.sNums b{display:block;font-size:20px;color:#6e3218}
+.sNums span{font-size:12px;color:#555}
+.sBar{height:10px;border-radius:5px;background:#9fbf8f;overflow:hidden}
+.sBar i{display:block;height:100%;background:#a9502b}
+.sBarL{display:flex;justify-content:space-between;font-size:12px;color:#555;margin:2px 0 6px}
+.sLine{margin:3px 0}
+.sGain{margin:8px 0 2px;padding:6px 10px;border-radius:10px;background:#eef7ee;color:#1e5631}
+.sGain b{font-size:18px}
+.sBtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.sBtns button{flex:1;min-height:42px;margin:0;font-size:14px}
+body.dark #sumCard{background:#1d1a18;color:#e6e9ef}
+body.dark #sumCard .sHead{color:#f0a27e}
+body.dark .sNums div{background:#2e2926}
+body.dark .sNums b{color:#f6d9c8}
+body.dark .sNums span, body.dark .sBarL{color:#b0a69f}
+body.dark .sBar{background:#4f6b46}
+body.dark .sGain{background:#1f3324;color:#bfe3c6}
+/* 版10：📊比較・記録のタブ。ナビ前は記録が上、ナビ中は候補が上 */
+#tab-cmp.open{display:flex;flex-direction:column}
+body.driving #logCard{order:2}
+.logMonth{font-weight:bold;color:#6e3218;margin:0 0 4px}
+.logMonth:empty{display:none}
+.logRow{display:block;width:100%;text-align:left;background:#fff;border:1px solid #ecc9b6;border-radius:10px;padding:6px 10px;margin:0 0 6px;line-height:1.45;color:#222}
+.logRow span{display:block}
+.logRow .lD{font-size:12px;color:#777}
+.logRow .lR{font-weight:bold}
+.logRow .lN{font-size:13px;color:#555}
+.logRow .lN b{color:#1e5631}
+#logMore{width:100%}
+body.dark .logMonth{color:#f0a27e}
+body.dark .logRow{background:#262220;border-color:#4a413c;color:#e6e9ef}
+body.dark .logRow .lD, body.dark .logRow .lN{color:#b0a69f}
+body.dark .logRow .lN b{color:#9fd8a8}
+#bkMsg:empty{display:none}
+#bkMsg{margin-top:4px}

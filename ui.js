@@ -5,11 +5,14 @@
 // ・ナビの再開（30分以内に開き直したら続けるか聞く）
 // ・版の表示と古いファイルの知らせ
 // （版6）下のタブと真ん中の丸い▶、境目のつまみ、押して選ぶ並び、ホーム画面に追加
+// （版10）保存できなかったときの知らせ、走った記録（log.js）の起動
 // （版9）比べ方の設定の保存、新しい版の知らせ、色をテラコッタ系に（地図のルートの線は渋滞の赤と見分けるため紺のまま）
-(window.KOMU_FV = window.KOMU_FV || {}).ui = 9;
+(window.KOMU_FV = window.KOMU_FV || {}).ui = 10;
 
 function lsGetStr(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
-function lsSetStr(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+// 版10：保存できなかったら赤い字で知らせる（同じ知らせは1回だけ）
+let lsWarned = false;
+function lsSetStr(k, v) { try { localStorage.setItem(k, v); } catch (e) { if (!lsWarned) { lsWarned = true; showErr('設定を保存できませんでした（' + (e && e.name === 'QuotaExceededError' ? '保存場所がいっぱいです' : (e && e.message) || e) + '）'); } } }
 
 // ---------- 走行中の画面 ----------
 const NEAR_RED = 100;      // 曲がり角の何m手前から赤くするか
@@ -408,4 +411,5 @@ function initUi() {
   initUpdate();
   $('stop').onclick = stopPress;
   readShareLink(); // 共有リンクから開いたとき
+  if (typeof initLog === 'function') initLog(); // 版10：走った記録・控え
 }
